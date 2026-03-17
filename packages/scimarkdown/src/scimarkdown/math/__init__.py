@@ -2,5 +2,6 @@
 
 from .detector import MathDetector
 from .formatter import MathFormatter
+from .ocr import MathOCR
 
-__all__ = ["MathDetector", "MathFormatter"]
+__all__ = ["MathDetector", "MathFormatter", "MathOCR"]
