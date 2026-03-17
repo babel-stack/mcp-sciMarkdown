@@ -1,0 +1,109 @@
+name: Upstream Sync
+
+on:
+  schedule:
+    # Run on the 1st and 15th of every month at 06:00 UTC
+    - cron: "0 6 1 * *"
+    - cron: "0 6 15 * *"
+  workflow_dispatch:
+    inputs:
+      remote:
+        description: "Name of the upstream git remote"
+        required: false
+        default: "upstream"
+      branch:
+        description: "Upstream branch to merge"
+        required: false
+        default: "main"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync with upstream microsoft/markitdown
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/microsoft/markitdown.git || true
+          git fetch upstream
+
+      - name: Install SciMarkdown and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "packages/scimarkdown[dev]"
+
+      - name: Run upstream sync script
+        id: sync
+        run: |
+          python -m scimarkdown.sync.upstream \
+            --remote "${{ github.event.inputs.remote || 'upstream' }}" \
+            --branch "${{ github.event.inputs.branch || 'main' }}" \
+            --report-dir sync-reports \
+            --verbose
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+        continue-on-error: true
+
+      - name: Upload sync report
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-report
+          path: sync-reports/
+          if-no-files-found: ignore
+
+      - name: Determine sync outcome
+        id: outcome
+        run: |
+          if git log --oneline HEAD^..HEAD | grep -q "chore: merge upstream"; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push merge branch
+        if: steps.outcome.outputs.merged == 'true'
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          BRANCH="upstream-sync/${DATE}"
+          git checkout -b "$BRANCH"
+          git push origin "$BRANCH"
+          echo "sync_branch=$BRANCH" >> "$GITHUB_ENV"
+
+      - name: Create pull request
+        if: steps.outcome.outputs.merged == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = process.env.sync_branch;
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `chore: upstream sync ${new Date().toISOString().slice(0, 10)}`,
+              head: branch,
+              base: 'main',
+              body: [
+                '## Upstream Sync',
+                '',
+                'This PR was created automatically by the upstream-sync workflow.',
+                '',
+                '### What to do',
+                '- Review the diff for breaking changes.',
+                '- Verify CI is green.',
+                '- Merge when ready.',
+              ].join('\n'),
+            });
+            core.info(`Pull request created: ${pr.html_url}`);
