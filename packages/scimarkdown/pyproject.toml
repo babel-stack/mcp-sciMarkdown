@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scimarkdown"
+version = "0.1.0+mit0.1.1"
+description = "Scientific markdown converter with LaTeX formula detection and image extraction"
+requires-python = ">=3.10"
+dependencies = [
+    "markitdown[all]>=0.1.1,<0.2.0",
+    "Pillow>=9.0.0",
+    "PyMuPDF>=1.24.0",
+    "python-docx",
+    "PyYAML",
+]
+
+[project.optional-dependencies]
+ocr = ["pix2tex>=0.1.1"]
+nougat = ["nougat-ocr"]
+llm = ["openai>=1.0.0", "anthropic"]
+all = ["scimarkdown[ocr]", "scimarkdown[nougat]", "scimarkdown[llm]"]
+
+[project.scripts]
+scimarkdown = "scimarkdown.__main__:main"
+scimarkdown-mcp = "scimarkdown.mcp.__main__:main"
