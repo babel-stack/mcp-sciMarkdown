@@ -58,28 +58,41 @@ Document
 +-----------------------------+
 ```
 
+### Why not use MarkItDown's plugin system?
+
+MarkItDown has a plugin system (entry points under `markitdown.plugin`) that allows registering new converters via `register_converters()`. However, this system is designed exclusively for adding **new file formats**, not for post-processing or enriching the output of existing converters. There is no middleware, hook, or event system that allows intercepting a conversion result before it is returned. Therefore, the plugin system cannot meet our requirements for cross-format formula detection and image extraction.
+
 ### Fork strategy
 
-**Modified in upstream code (~50 lines):**
+**Dual-pass architecture:** `EnhancedMarkItDown` subclasses `MarkItDown` and overrides `convert()`. The override works in two passes:
+
+1. **Pass 1 (MarkItDown):** Calls `super().convert()` to get the standard markdown output. This is Phase 1 — no upstream converters are modified.
+2. **Pass 2 (SciMarkdown):** Re-opens the original source document using format-specific extractors in `scimarkdown/` to obtain structured data (images, math regions, positional metadata). This is Phase 2.
+3. **Merge:** Phase 3 merges the markdown from Pass 1 with the structured data from Pass 2 to produce the enriched output.
+
+The double-parse has a performance cost (~1.5-2x), but guarantees zero modifications to existing converters. The source document is read from memory (seekable stream), not disk, so the I/O overhead is negligible.
+
+**Modified in upstream code (~30 lines):**
 
 | File | Change |
 |---|---|
-| `_markitdown.py` | Add hooks for pipeline phases via subclass override |
-| `_base_converter.py` | Extend `DocumentConverterResult` with optional `enrichment_data` field |
+| `_markitdown.py` | Make `convert()` method overridable: ensure the file stream is seekable (wrap in `BytesIO` if needed) so the subclass can re-read the source after `super().convert()` completes |
 
 **NOT modified:**
+- `_base_converter.py` — no changes to `DocumentConverterResult`
 - No existing converter is touched
 - All existing tests must continue to pass
 
 **Enhancement code lives in `scimarkdown/` package:**
 
-`EnhancedMarkItDown` subclasses `MarkItDown`, overrides only `convert()` to inject phases 2 and 3. 95% of code is in the separate package with zero merge conflict risk.
+`EnhancedMarkItDown` subclasses `MarkItDown`, overrides only `convert()` to inject the dual-pass pipeline. 95%+ of code is in the separate package with zero merge conflict risk.
 
 ### Intermediate data model
 
-`EnrichedResult` transports data between phases:
+`EnrichedResult` transports data between Phase 2 and Phase 3:
 
-- `text_blocks`: list of text blocks with ordinal position
+- `base_markdown`: the markdown string from Phase 1 (MarkItDown output)
+- `text_blocks`: list of text blocks with ordinal position (from format-specific re-parse)
 - `images`: list of extracted images with position, saved path, and text reference
 - `math_regions`: detected math regions (text or image) with resulting LaTeX
 - `metadata`: title, author, etc.
@@ -97,11 +110,9 @@ scimarkdown/
 |       +-- __init__.py
 |       +-- _enhanced_markitdown.py   <- Subclass of MarkItDown
 |       +-- config.py                 <- Configuration (LaTeX format, paths, LLM)
-|       +--
 |       +-- pipeline/
 |       |   +-- enrichment.py         <- Phase 2 orchestrator
 |       |   +-- composition.py        <- Phase 3 orchestrator
-|       +--
 |       +-- math/
 |       |   +-- detector.py           <- Heuristic detection in text
 |       |   |                            (regex Unicode, MathML, scientific patterns)
@@ -109,19 +120,16 @@ scimarkdown/
 |       |   |                            (pix2tex for isolated, Nougat for full pages)
 |       |   +-- formatter.py          <- Configurable LaTeX formatter
 |       |                                ($...$ / $$...$$ vs GitHub-flavored)
-|       +--
 |       +-- images/
 |       |   +-- extractor.py          <- Extracts embedded images (per format)
 |       |   +-- cropper.py            <- Rasterizes and crops graphic regions
 |       |   +-- reference_linker.py   <- Links "Figure X" in text to image
 |       |   +-- index_builder.py      <- Generates figure index
-|       +--
 |       +-- models/
 |       |   +-- enriched_result.py    <- EnrichedResult dataclass
 |       |   +-- text_block.py         <- Text block with position
 |       |   +-- math_region.py        <- Detected math region
 |       |   +-- image_ref.py          <- Image reference with metadata
-|       +--
 |       +-- llm/
 |       |   +-- fallback.py           <- Generic LLM client (OpenAI/Claude)
 |       +--
@@ -138,7 +146,7 @@ scimarkdown/
 | Format | Detection method | Tool | Expected quality |
 |---|---|---|---|
 | **DOCX** | Native OMML in XML | Existing MarkItDown omml.py | Excellent |
-| **PPTX** | OMML in slides XML | Same OMML module adapted | Excellent |
+| **PPTX** | OMML in slides XML | Reuse existing omml.py (called from scimarkdown extractor, not modifying pptx converter) | Excellent |
 | **HTML** | MathML tags, KaTeX/MathJax class attributes, `<math>` elements | BeautifulSoup + regex | Very good |
 | **PDF (text)** | Unicode math patterns (sum, integral, sqrt, leq, in...), layout heuristics (superscripts, fractions) | Regex + pdfplumber character positions | Good |
 | **PDF (formula as image)** | Detection of text-free regions with equation layout | pix2tex for isolated formulas | Very good |
@@ -217,7 +225,13 @@ Example: paper_relativity_img00001.png
 - `Imagen X`, `Image X`, `Img. X`
 - Configurable patterns via regex for other languages
 
-When a reference is found, it links to the positionally closest image with the same ordinal number.
+**Linking algorithm (ordered by priority):**
+
+1. **Exact ordinal match:** "Figure 3" links to the 3rd image extracted from the document, regardless of position. This handles forward references ("see Figure 5 below") correctly.
+2. **Caption match:** If the image has a detected caption (text immediately below/above in the source), match references to captions by number.
+3. **Proximity fallback:** If no ordinal match is found (e.g., unnumbered figures), link to the positionally closest unlinked image.
+4. **Repeated references:** Multiple references to the same figure (e.g., "as shown in Figure 1" appearing twice) all link to the same image file.
+5. **Unmatched images:** Images with no text reference still appear in the markdown at their document position and in the figure index, marked as "(no reference)".
 
 ### Markdown output
 
@@ -361,25 +375,30 @@ This always shows which MarkItDown version SciMarkdown is built on.
 | `Pillow>=9.0.0` | Cropping, autocrop, rasterization |
 | `PyMuPDF>=1.24.0` | PDF image extraction, region rasterization |
 | `python-docx` | Access to DOCX embedded images |
-| `pix2tex>=0.1.1` | Isolated formula OCR |
 | `PyYAML` | Read `scimarkdown.yaml` |
+
+The minimum install provides: heuristic formula detection (regex, Unicode, MathML), image extraction, and all composition features. No PyTorch, no GPU.
 
 ### Optional dependencies
 
 | Package | Use | Install group |
 |---|---|---|
-| `nougat-ocr` | Full academic paper OCR (~3GB model) | `[nougat]` |
+| `pix2tex>=0.1.1` | Isolated formula OCR (~500MB + PyTorch) | `[ocr]` |
+| `nougat-ocr` | Full academic paper OCR (~3GB model + PyTorch) | `[nougat]` |
 | `openai>=1.0.0` | LLM fallback (OpenAI) | `[llm]` |
 | `anthropic` | LLM fallback (Claude) | `[llm]` |
-| `torch` | Required by Nougat and pix2tex | Implicit with OCR |
+| `torch` | Required by pix2tex and Nougat | Implicit with `[ocr]` or `[nougat]` |
 
 ### Installation groups
 
 ```bash
-# Minimum: heuristics + pix2tex (lightweight)
+# Minimum: heuristics only (lightweight, no PyTorch)
 pip install scimarkdown
 
-# With Nougat for academic papers (~3GB additional)
+# With pix2tex for formula OCR (~500MB + PyTorch)
+pip install scimarkdown[ocr]
+
+# With Nougat for academic papers (~3GB additional + PyTorch)
 pip install scimarkdown[nougat]
 
 # With LLM fallback
@@ -393,7 +412,7 @@ pip install scimarkdown[all]
 
 - Python >= 3.10
 - `exiftool` (optional, for image EXIF metadata)
-- GPU recommended for Nougat (works on CPU but slow)
+- GPU recommended for `[ocr]` and `[nougat]` (works on CPU but slow)
 - ~500MB disk for pix2tex, ~3GB for Nougat
 
 ---
@@ -468,23 +487,109 @@ Push/PR -> lint + format -> unit tests -> integration tests (no GPU)
 
 The forked MCP server (`markitdown-mcp`) is extended to expose 2 tools:
 
-### Tool 1: `convert_to_markdown` (enhanced)
+### Tool 1: `convert_to_markdown` (compatibility, unchanged)
 
 ```python
 @mcp.tool()
-async def convert_to_markdown(uri: str, config: Optional[dict] = None) -> str:
+async def convert_to_markdown(uri: str) -> str:
+    """Convert a document to markdown (original MarkItDown behavior)."""
+    # Uses base MarkItDown, no enrichment
+    # Signature unchanged — existing clients are not affected
+```
+
+### Tool 2: `convert_to_scimarkdown` (new, enhanced)
+
+```python
+@mcp.tool()
+async def convert_to_scimarkdown(uri: str, config: Optional[dict] = None) -> str:
     """Convert a document to markdown with LaTeX formulas and image extraction."""
     # Uses EnhancedMarkItDown with full pipeline
     # config overrides scimarkdown.yaml values
 ```
 
-### Tool 2: `convert_to_markdown_simple` (compatibility)
-
-```python
-@mcp.tool()
-async def convert_to_markdown_simple(uri: str) -> str:
-    """Convert a document to markdown (original MarkItDown behavior)."""
-    # Uses base MarkItDown, no enrichment
-```
-
 Both tools support the same URI schemes: `http://`, `https://`, `file:`, `data:`.
+
+**Migration path:** The original `convert_to_markdown` keeps its exact signature — no breaking change. The new `convert_to_scimarkdown` is additive. Clients can migrate at their own pace.
+
+---
+
+## 11. Error handling and graceful degradation
+
+The pipeline must never crash on a conversion. If enrichment fails, the base markdown from Phase 1 is always available as fallback.
+
+### Degradation strategy per component
+
+| Component | Failure scenario | Behavior |
+|---|---|---|
+| **MathDetector (heuristic)** | Regex false positive | Include with low-confidence marker `<!-- sci:math:low-confidence -->` in HTML comment |
+| **MathOCR (pix2tex)** | Model not installed | Skip OCR, rely on heuristics only. Log warning. |
+| **MathOCR (pix2tex)** | Confidence below threshold | If LLM available, delegate. Otherwise leave as plain text. |
+| **MathOCR (Nougat)** | Model not installed / OOM | Fall back to pix2tex per-formula. If unavailable, heuristics only. |
+| **ImageExtractor** | Cannot extract image from format | Log warning, skip image. Include `<!-- sci:image:extraction-failed -->` at position. |
+| **ImageCropper** | Bounding box detection fails | Skip cropping, extract full page region at lower quality. |
+| **ReferenceLinker** | No matching image for reference | Keep reference text as-is, do not insert broken link. |
+| **LLM Fallback** | API down / timeout / rate limit | Skip LLM enrichment. Log error. Continue with local results. |
+| **Full Phase 2 failure** | Unexpected exception | Return Phase 1 markdown unchanged. Log full traceback. |
+
+### Counter overflow
+
+If a document has more than 99999 images (5-digit counter), the counter automatically extends to 6 digits for that document. No error, no truncation.
+
+### Logging
+
+Structured logging with levels:
+- `INFO`: conversion started, phases completed, image count, formula count
+- `WARNING`: component skipped (model not installed, extraction failed)
+- `ERROR`: unexpected exception caught, LLM API failure
+- `DEBUG`: per-formula confidence scores, per-image bounding boxes
+
+---
+
+## 12. Performance and resource constraints
+
+### Expected processing times (approximate)
+
+| Document type | Size | Base MarkItDown | SciMarkdown (heuristic) | SciMarkdown (OCR) |
+|---|---|---|---|---|
+| PDF 10 pages | ~1MB | ~2s | ~4s | ~30s (pix2tex) / ~60s (Nougat) |
+| PDF 100 pages paper | ~5MB | ~15s | ~30s | ~5min (Nougat GPU) / ~20min (CPU) |
+| DOCX 50 pages | ~2MB | ~3s | ~6s | ~20s |
+| PPTX 30 slides | ~10MB | ~5s | ~10s | ~40s |
+| Scanned PDF 20 pages | ~15MB | ~10s | ~15s | ~2min (Nougat GPU) |
+
+### Resource limits
+
+| Resource | Default limit | Configurable |
+|---|---|---|
+| Max images per document | 10000 | `images.max_count` |
+| Max image file size (single) | 50MB | `images.max_file_size_mb` |
+| Max total images disk | 500MB | `images.max_total_size_mb` |
+| OCR timeout per formula | 30s | `math.ocr_timeout_seconds` |
+| Nougat timeout per page | 120s | `math.nougat_timeout_seconds` |
+| LLM timeout per request | 60s | `llm.timeout_seconds` |
+
+### Memory management
+
+- Images are written to disk immediately after extraction, not held in memory
+- Nougat processes one page at a time (not the full document at once)
+- pix2tex model loaded lazily on first formula image, unloaded after conversion if `math.unload_models: true`
+- For documents exceeding resource limits, processing stops for that resource type (e.g., no more images extracted) but conversion continues for other components
+
+### MCP considerations
+
+- MCP tool calls are async — long conversions do not block the server
+- No streaming support in current MCP spec — full result returned on completion
+- For very large documents (>100 pages with OCR), consider pre-converting via CLI rather than MCP
+
+### Configuration additions for `scimarkdown.yaml`
+
+```yaml
+# Performance (added to existing config)
+performance:
+  max_images: 10000
+  max_image_file_size_mb: 50
+  max_total_images_size_mb: 500
+  ocr_timeout_seconds: 30
+  nougat_timeout_seconds: 120
+  unload_models_after_conversion: false
+```
