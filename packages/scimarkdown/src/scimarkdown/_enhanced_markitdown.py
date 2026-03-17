@@ -9,6 +9,7 @@ from markitdown import MarkItDown, DocumentConverterResult
 from markitdown._stream_info import StreamInfo
 
 from .config import SciMarkdownConfig, load_config
+from .pipeline import EnrichmentPipeline, CompositionPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,8 @@ class EnhancedMarkItDown(MarkItDown):
 
     Dual-pass architecture:
     - Pass 1: super().convert*() for base markdown
-    - Pass 2: Re-parse source for structured data
-    - Merge: Compose enriched markdown
+    - Pass 2: Re-parse source for structured data (EnrichmentPipeline)
+    - Merge: Compose enriched markdown (CompositionPipeline)
     """
 
     def __init__(
@@ -31,6 +32,49 @@ class EnhancedMarkItDown(MarkItDown):
         super().__init__(**kwargs)
         self.sci_config = sci_config or load_config()
         self.output_dir = output_dir or Path(".")
+        self._enrichment = EnrichmentPipeline(self.sci_config)
+        self._composition = CompositionPipeline(self.sci_config)
 
-    # Phase 2 and 3 will be added in Task 14.
-    # For now, this is a passthrough skeleton.
+    def convert_stream(self, stream, *, stream_info=None, file_extension=None, **kwargs):
+        """Convert a byte stream with dual-pass enrichment.
+
+        Pass 1 produces the base markdown via the parent class.
+        Pass 2 enriches and composes the final markdown.
+        On any error in Pass 2, the base result is returned unchanged.
+        """
+        if not stream.seekable():
+            stream = io.BytesIO(stream.read())
+
+        stream.seek(0)
+        base_result = super().convert_stream(
+            stream, stream_info=stream_info, file_extension=file_extension, **kwargs
+        )
+
+        stream.seek(0)
+        try:
+            document_name = "document"
+            if file_extension:
+                document_name = f"document{file_extension}"
+
+            output_dir = self.output_dir
+            if self.sci_config.images_output_dir != "same":
+                output_dir = Path(self.sci_config.images_output_dir)
+
+            ext = file_extension or ""
+            enriched = self._enrichment.enrich(
+                base_markdown=base_result.markdown or "",
+                source_stream=stream,
+                file_extension=ext,
+                document_name=document_name,
+                output_dir=output_dir,
+            )
+
+            final_markdown = self._composition.compose(enriched)
+
+            return DocumentConverterResult(
+                title=base_result.title,
+                markdown=final_markdown,
+            )
+        except Exception as e:
+            logger.error(f"Enrichment failed, returning base result: {e}", exc_info=True)
+            return base_result
