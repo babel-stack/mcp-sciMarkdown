@@ -33,6 +33,8 @@ class EnrichmentPipeline:
 
     def __init__(self, config: SciMarkdownConfig) -> None:
         self.config = config
+        from ..llm.fallback import LLMFallback
+        self.llm_fallback = LLMFallback(config)
 
     def enrich(
         self,
@@ -65,14 +67,31 @@ class EnrichmentPipeline:
         # ---------------------------------------------------------------
         # Math detection
         # ---------------------------------------------------------------
+        math_regions = []
         if self.config.math_heuristic:
             try:
                 from scimarkdown.math.detector import MathDetector
 
                 detector = MathDetector()
-                result.math_regions = detector.detect(base_markdown)
+                math_regions = detector.detect(base_markdown)
             except Exception as exc:
                 logger.warning("Math detection failed: %s", exc, exc_info=True)
+
+        # LLM fallback for low-confidence math regions
+        if self.config.llm_enabled and math_regions:
+            enhanced_regions = []
+            for region in math_regions:
+                if region.confidence < self.config.math_confidence_threshold:
+                    llm_result = self.llm_fallback.recognize_math(region.original_text)
+                    if llm_result:
+                        enhanced_regions.append(llm_result)
+                    else:
+                        enhanced_regions.append(region)
+                else:
+                    enhanced_regions.append(region)
+            math_regions = enhanced_regions
+
+        result.math_regions = math_regions
 
         # ---------------------------------------------------------------
         # Image extraction
