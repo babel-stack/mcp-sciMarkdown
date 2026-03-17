@@ -48,8 +48,11 @@ class ImageExtractor:
         padded = str(number).zfill(width)
         return f"{self.document_name}_img{padded}.{ext}"
 
-    def _next_filename(self, ext: str = "png") -> str:
-        """Increment counter and return the next filename."""
+    def _next_filename(self, ext: str = "png") -> Optional[str]:
+        """Increment counter and return the next filename, or None if limit reached."""
+        if self._counter >= self.config.performance_max_images:
+            logger.warning("Max images limit (%d) reached, skipping.", self.config.performance_max_images)
+            return None
         self._counter += 1
         return self._make_filename(self._counter, ext)
 
@@ -60,12 +63,22 @@ class ImageExtractor:
     def _save_image(self, img: "PIL.Image.Image", filename: str) -> Optional[str]:  # noqa: F821
         """Save *img* to ``output_dir/filename``.
 
-        Respects ``performance_max_image_file_size_mb`` and
+        Applies auto-cropping if enabled, then respects
+        ``performance_max_image_file_size_mb`` and
         ``performance_max_total_images_size_mb`` from config.
 
         Returns the absolute file path as a string, or ``None`` if skipped.
         """
         from PIL import Image  # noqa: F401 — ensure PIL available
+        from .cropper import ImageCropper
+
+        # Apply auto-cropping if enabled
+        if self.config.images_autocrop_whitespace:
+            cropper = ImageCropper(
+                margin=self.config.images_margin_px,
+                autocrop=True,
+            )
+            img = cropper.crop(img)
 
         max_file_mb = self.config.performance_max_image_file_size_mb
         max_total_mb = self.config.performance_max_total_images_size_mb
@@ -107,7 +120,7 @@ class ImageExtractor:
 
         results: list[ImageRef] = []
         data = stream.read()
-        doc = fitz.open(stream="data", filetype="pdf")  # type: ignore[attr-defined]
+        doc = fitz.open(stream=data, filetype="pdf")  # type: ignore[attr-defined]
 
         try:
             for page_num, page in enumerate(doc):

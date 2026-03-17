@@ -52,8 +52,13 @@ class EnhancedMarkItDown(MarkItDown):
 
         stream.seek(0)
         try:
+            # Derive document name from stream_info, fallback to generic
             document_name = "document"
-            if file_extension:
+            if stream_info and hasattr(stream_info, 'filename') and stream_info.filename:
+                document_name = stream_info.filename
+            elif stream_info and hasattr(stream_info, 'local_path') and stream_info.local_path:
+                document_name = str(Path(stream_info.local_path).name)
+            elif file_extension:
                 document_name = f"document{file_extension}"
 
             output_dir = self.output_dir

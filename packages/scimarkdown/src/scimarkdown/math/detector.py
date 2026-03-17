@@ -248,8 +248,9 @@ class MathDetector:
 
     def detect(self, text: str) -> List[MathRegion]:
         """Return all detected MathRegion objects from *text*."""
-        mathml_regions = self._detect_mathml(text)
-        mathjax_regions = self._detect_mathjax(text)
+        # Skip HTML parsing if text doesn't contain HTML math markers
+        mathml_regions = self._detect_mathml(text) if "<math" in text.lower() else []
+        mathjax_regions = self._detect_mathjax(text) if ("mathjax" in text.lower() or "katex" in text.lower() or "\\(" in text or "\\[" in text or 'class="' in text) else []
 
         # Collect ranges already covered by MathML and MathJax to avoid duplicates
         covered_ranges: list[tuple[int, int]] = []

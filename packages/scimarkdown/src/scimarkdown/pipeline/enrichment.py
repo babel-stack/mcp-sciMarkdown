@@ -84,6 +84,8 @@ class EnrichmentPipeline:
                 if region.confidence < self.config.math_confidence_threshold:
                     llm_result = self.llm_fallback.recognize_math(region.original_text)
                     if llm_result:
+                        llm_result.position = region.position
+                        llm_result.original_text = region.original_text
                         enhanced_regions.append(llm_result)
                     else:
                         enhanced_regions.append(region)
