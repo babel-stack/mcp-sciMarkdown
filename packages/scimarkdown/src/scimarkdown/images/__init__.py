@@ -2,5 +2,6 @@
 
 from .extractor import ImageExtractor
 from .cropper import ImageCropper
+from .reference_linker import ReferenceLinker
 
-__all__ = ["ImageExtractor", "ImageCropper"]
+__all__ = ["ImageExtractor", "ImageCropper", "ReferenceLinker"]
