@@ -35,6 +35,42 @@ class EnhancedMarkItDown(MarkItDown):
         self._enrichment = EnrichmentPipeline(self.sci_config)
         self._composition = CompositionPipeline(self.sci_config)
 
+    def convert_local(self, path, *, stream_info=None, file_extension=None, url=None, **kwargs):
+        """Override convert_local to route through convert_stream for enrichment."""
+        import os
+        if isinstance(path, Path):
+            path = str(path)
+
+        # Build StreamInfo the same way the parent does
+        base_guess = StreamInfo(
+            local_path=path,
+            extension=os.path.splitext(path)[1],
+            filename=os.path.basename(path),
+        )
+        if stream_info is not None:
+            base_guess = base_guess.copy_and_update(stream_info)
+        if file_extension is not None:
+            base_guess = base_guess.copy_and_update(extension=file_extension)
+        if url is not None:
+            base_guess = base_guess.copy_and_update(url=url)
+
+        ext = file_extension or os.path.splitext(path)[1]
+
+        # Read file into memory and route through convert_stream
+        with open(path, "rb") as fh:
+            data = fh.read()
+
+        # Set output_dir to the file's parent directory when "same"
+        if self.sci_config.images_output_dir == "same":
+            self.output_dir = Path(path).parent.resolve()
+
+        return self.convert_stream(
+            io.BytesIO(data),
+            stream_info=base_guess,
+            file_extension=ext,
+            **kwargs,
+        )
+
     def convert_stream(self, stream, *, stream_info=None, file_extension=None, **kwargs):
         """Convert a byte stream with dual-pass enrichment.
 
