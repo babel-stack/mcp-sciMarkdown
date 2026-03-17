@@ -1,0 +1,57 @@
+# SciMarkdown default configuration
+# All values shown are the defaults. Uncomment and edit to override.
+
+# LaTeX format
+latex:
+  style: "standard"          # "standard" ($...$, $$...$$) or "github" ($`...`$, ```math)
+
+# Images
+images:
+  output_dir: "same"          # "same" = next to original document
+  format: "png"               # output format for rasterized images
+  dpi: 300                    # resolution for vector rasterization
+  margin_px: 10               # margin when cropping regions
+  counter_digits: 5           # counter digits (img00001)
+  autocrop_whitespace: true   # auto-crop white borders
+
+# Formula detection
+math:
+  heuristic: true             # regex/Unicode detection
+  ocr_engine: "auto"          # "pix2tex", "nougat", or "auto" (chooses by context)
+  nougat_model: "0.1.0-base"  # Nougat model
+  confidence_threshold: 0.75  # minimum threshold to accept OCR without LLM
+
+# LLM Fallback
+llm:
+  enabled: false              # enable LLM fallback
+  provider: "openai"          # "openai" or "anthropic"
+  model: "gpt-4o"             # model to use
+  api_key_env: "LLM_API_KEY"  # environment variable with API key
+
+# References
+references:
+  patterns:                   # reference patterns (regex)
+    - 'Fig(?:ura|ure|\.)\s*(\d+)'
+    - 'Tab(?:la|le|\.)\s*(\d+)'
+    - 'Gr[aA]f(?:ico|h)\s*(\d+)'
+    - 'Im(?:agen|age|g\.?)\s*(\d+)'
+    - 'Chart\s*(\d+)'
+  languages: ["es", "en"]     # detection languages
+  generate_index: true        # generate figure index at end
+
+# Upstream sync
+sync:
+  remote: "https://github.com/microsoft/markitdown.git"
+  branch: "main"
+  check_interval_days: 14     # every 2 weeks
+
+# Performance limits
+performance:
+  total_timeout_seconds: 1800             # 30 minutes total conversion timeout
+  max_images: 10000                       # maximum images to extract per document
+  max_image_file_size_mb: 50             # skip individual images larger than this
+  max_total_images_size_mb: 500          # stop extracting after this total size
+  ocr_timeout_seconds: 30                # per-image OCR timeout
+  nougat_timeout_seconds: 120            # per-page Nougat timeout
+  llm_timeout_seconds: 60               # per-region LLM call timeout
+  unload_models_after_conversion: false  # free GPU memory after each document

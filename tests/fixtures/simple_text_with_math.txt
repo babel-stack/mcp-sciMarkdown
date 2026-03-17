@@ -1,0 +1,19 @@
+This document contains various mathematical expressions written with Unicode characters.
+
+Greek letters are common in mathematics: α, β, γ, δ, ε, θ, λ, μ, π, σ, φ, ω.
+
+Set notation: For all x ∈ ℝ, the sum ∑ᵢ xᵢ ≤ ∫ f(x)dx holds.
+
+Inequalities: a ≤ b ≥ c ≠ d, and x ≈ y when |x - y| < ε.
+
+Superscripts and subscripts: x² + y² = z², aₙ → L as n → ∞.
+
+Fractions and roots: ½ + ⅓ = 5/6, and √2 is irrational.
+
+Operators: The norm ‖v‖ = √(v₁² + v₂² + v₃²).
+
+Arrows: f: ℝ → ℝ, and g ∘ h denotes composition.
+
+Number sets: ℕ ⊂ ℤ ⊂ ℚ ⊂ ℝ ⊂ ℂ.
+
+Calculus: The derivative df/dx = lim_{h→0} [f(x+h) - f(x)] / h.
