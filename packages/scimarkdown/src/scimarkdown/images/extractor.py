@@ -1,4 +1,4 @@
-"""Image extractor for PDF, DOCX, and PPTX documents."""
+"""Image extractor for PDF, DOCX, PPTX, HTML, EPUB, and Jupyter documents."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from scimarkdown.models import ImageRef
 
 
 class ImageExtractor:
-    """Extracts embedded images from PDF, DOCX, and PPTX documents."""
+    """Extracts embedded images from PDF, DOCX, PPTX, HTML, EPUB, and Jupyter documents."""
 
     def __init__(
         self,
@@ -158,6 +158,169 @@ class ImageExtractor:
     def extract_from_pptx(self, stream: IO[bytes]) -> list[ImageRef]:
         """Extract embedded images from a PPTX byte stream (ppt/media/)."""
         return self._extract_from_zip(stream, prefix="ppt/media/")
+
+    def extract_from_html(self, stream: IO[bytes]) -> list[ImageRef]:
+        """Extract images from an HTML byte stream.
+
+        Finds ``<img>`` tags with base64 data URIs (``data:image/...;base64,...``),
+        decodes them, opens via PIL, and saves to ``output_dir``.
+        """
+        try:
+            from bs4 import BeautifulSoup
+        except ImportError as exc:
+            raise ImportError("beautifulsoup4 is required for HTML extraction") from exc
+
+        from PIL import Image
+
+        results: list[ImageRef] = []
+        html_bytes = stream.read()
+        soup = BeautifulSoup(html_bytes, "html.parser")
+
+        for idx, img_tag in enumerate(soup.find_all("img")):
+            src = img_tag.get("src", "")
+            if not src.startswith("data:image/"):
+                continue
+
+            try:
+                # data:image/png;base64,<data>
+                header, b64data = src.split(",", 1)
+                # derive extension from mime type
+                mime_part = header.split(";")[0]  # e.g. "data:image/png"
+                ext = mime_part.split("/")[-1].lower()  # e.g. "png"
+                if ext == "jpeg":
+                    ext = "jpg"
+
+                raw_bytes = __import__("base64").b64decode(b64data)
+                pil_img = Image.open(io.BytesIO(raw_bytes))
+                pil_img.load()
+            except Exception:
+                continue
+
+            filename = self._next_filename(ext)
+            saved_path = self._save_image(pil_img, filename)
+            if saved_path is None:
+                self._counter -= 1
+                continue
+
+            results.append(
+                ImageRef(
+                    position=idx,
+                    file_path=saved_path,
+                    original_format=ext,
+                    width=pil_img.width,
+                    height=pil_img.height,
+                )
+            )
+
+        return results
+
+    def extract_from_epub(self, stream: IO[bytes]) -> list[ImageRef]:
+        """Extract images from an EPUB byte stream (ZIP archive).
+
+        Finds PNG/JPG/GIF image files in the archive, skipping ``META-INF/``,
+        opens them with PIL, and saves to ``output_dir``.
+        """
+        from PIL import Image
+
+        _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+        results: list[ImageRef] = []
+
+        with zipfile.ZipFile(stream) as zf:
+            image_names = sorted(
+                name
+                for name in zf.namelist()
+                if not name.startswith("META-INF/")
+                and Path(name).suffix.lower() in _IMAGE_EXTENSIONS
+            )
+
+            for idx, member_name in enumerate(image_names):
+                raw = zf.read(member_name)
+                ext = Path(member_name).suffix.lstrip(".").lower()
+                if ext == "jpeg":
+                    ext = "jpg"
+
+                try:
+                    pil_img = Image.open(io.BytesIO(raw))
+                    pil_img.load()
+                except Exception:
+                    continue
+
+                filename = self._next_filename(ext or "png")
+                saved_path = self._save_image(pil_img, filename)
+                if saved_path is None:
+                    self._counter -= 1
+                    continue
+
+                results.append(
+                    ImageRef(
+                        position=idx,
+                        file_path=saved_path,
+                        original_format=ext or "png",
+                        width=pil_img.width,
+                        height=pil_img.height,
+                    )
+                )
+
+        return results
+
+    def extract_from_jupyter(self, stream: IO[bytes]) -> list[ImageRef]:
+        """Extract images from a Jupyter notebook byte stream.
+
+        Iterates cells → outputs → data, finds ``image/png`` or ``image/jpeg``
+        mime keys, decodes base64 data, and saves to ``output_dir``.
+        """
+        import base64
+        import json
+
+        from PIL import Image
+
+        results: list[ImageRef] = []
+        notebook = json.loads(stream.read())
+        cells = notebook.get("cells", [])
+        counter = 0
+
+        for cell in cells:
+            outputs = cell.get("outputs", [])
+            for output in outputs:
+                data = output.get("data", {})
+                for mime_type in ("image/png", "image/jpeg"):
+                    b64_data = data.get(mime_type)
+                    if b64_data is None:
+                        continue
+
+                    # Notebook data may be a list of lines or a single string
+                    if isinstance(b64_data, list):
+                        b64_data = "".join(b64_data)
+
+                    ext = mime_type.split("/")[-1]
+                    if ext == "jpeg":
+                        ext = "jpg"
+
+                    try:
+                        raw_bytes = base64.b64decode(b64_data)
+                        pil_img = Image.open(io.BytesIO(raw_bytes))
+                        pil_img.load()
+                    except Exception:
+                        continue
+
+                    filename = self._next_filename(ext)
+                    saved_path = self._save_image(pil_img, filename)
+                    if saved_path is None:
+                        self._counter -= 1
+                        continue
+
+                    results.append(
+                        ImageRef(
+                            position=counter,
+                            file_path=saved_path,
+                            original_format=ext,
+                            width=pil_img.width,
+                            height=pil_img.height,
+                        )
+                    )
+                    counter += 1
+
+        return results
 
     # ------------------------------------------------------------------
     # Internal helpers

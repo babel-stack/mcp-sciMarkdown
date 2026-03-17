@@ -15,6 +15,10 @@ _IMAGE_FORMATS: dict[str, str] = {
     ".pdf": "extract_from_pdf",
     ".docx": "extract_from_docx",
     ".pptx": "extract_from_pptx",
+    ".html": "extract_from_html",
+    ".htm": "extract_from_html",
+    ".epub": "extract_from_epub",
+    ".ipynb": "extract_from_jupyter",
 }
 
 
