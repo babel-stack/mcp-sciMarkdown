@@ -16,7 +16,7 @@ SciMarkdown is a fork of Microsoft MarkItDown that extends its document-to-markd
 ### Goals
 
 - Maintain quality and reliability as top priority
-- Minimize fork surface (~50 lines modified in upstream code) to ease upstream synchronization
+- Minimize fork surface (~30 lines modified in upstream code) to ease upstream synchronization
 - Keep all enhancement logic in a separate `scimarkdown` package
 - Provide a clear upgrade path if Microsoft adds middleware/hooks
 
@@ -305,11 +305,11 @@ sync:
 ### MCP Server (2 tools)
 
 ```
-convert_to_markdown(uri: str, config: Optional[dict]) -> str
-  -> Full enriched conversion (formulas + images)
+convert_to_markdown(uri: str) -> str
+  -> Original MarkItDown conversion (compatibility, unchanged signature)
 
-convert_to_markdown_simple(uri: str) -> str
-  -> Original MarkItDown conversion (compatibility)
+convert_to_scimarkdown(uri: str, config: Optional[dict]) -> str
+  -> Full enriched conversion (formulas + images)
 ```
 
 ---
@@ -561,12 +561,13 @@ Structured logging with levels:
 
 | Resource | Default limit | Configurable |
 |---|---|---|
-| Max images per document | 10000 | `images.max_count` |
-| Max image file size (single) | 50MB | `images.max_file_size_mb` |
-| Max total images disk | 500MB | `images.max_total_size_mb` |
-| OCR timeout per formula | 30s | `math.ocr_timeout_seconds` |
-| Nougat timeout per page | 120s | `math.nougat_timeout_seconds` |
-| LLM timeout per request | 60s | `llm.timeout_seconds` |
+| Total conversion timeout | 30min | `performance.total_timeout_seconds` |
+| Max images per document | 10000 | `performance.max_images` |
+| Max image file size (single) | 50MB | `performance.max_image_file_size_mb` |
+| Max total images disk | 500MB | `performance.max_total_images_size_mb` |
+| OCR timeout per formula | 30s | `performance.ocr_timeout_seconds` |
+| Nougat timeout per page | 120s | `performance.nougat_timeout_seconds` |
+| LLM timeout per request | 60s | `performance.llm_timeout_seconds` |
 
 ### Memory management
 
@@ -586,10 +587,12 @@ Structured logging with levels:
 ```yaml
 # Performance (added to existing config)
 performance:
+  total_timeout_seconds: 1800   # 30 min max per conversion
   max_images: 10000
   max_image_file_size_mb: 50
   max_total_images_size_mb: 500
   ocr_timeout_seconds: 30
   nougat_timeout_seconds: 120
+  llm_timeout_seconds: 60
   unload_models_after_conversion: false
 ```
