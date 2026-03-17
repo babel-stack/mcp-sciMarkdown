@@ -1,0 +1,262 @@
+"""Tests for CompositionPipeline (Phase 3)."""
+
+from __future__ import annotations
+
+import pytest
+
+from scimarkdown.config import SciMarkdownConfig
+from scimarkdown.models import EnrichedResult, ImageRef, MathRegion
+from scimarkdown.pipeline import CompositionPipeline
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_pipeline(**kwargs) -> CompositionPipeline:
+    config = SciMarkdownConfig(**kwargs)
+    return CompositionPipeline(config)
+
+
+def _enriched(
+    markdown: str = "",
+    images: list[ImageRef] | None = None,
+    math_regions: list[MathRegion] | None = None,
+) -> EnrichedResult:
+    return EnrichedResult(
+        base_markdown=markdown,
+        images=images or [],
+        math_regions=math_regions or [],
+    )
+
+
+def _image(
+    position: int = 0,
+    file_path: str = "/out/img.png",
+    original_format: str = "png",
+    caption: str | None = None,
+    reference_label: str | None = None,
+) -> ImageRef:
+    return ImageRef(
+        position=position,
+        file_path=file_path,
+        original_format=original_format,
+        caption=caption,
+        reference_label=reference_label,
+    )
+
+
+def _math_region(
+    position: int,
+    original_text: str,
+    latex: str,
+    is_inline: bool = True,
+    source_type: str = "unicode",
+    confidence: float = 0.9,
+) -> MathRegion:
+    return MathRegion(
+        position=position,
+        original_text=original_text,
+        latex=latex,
+        source_type=source_type,
+        confidence=confidence,
+        is_inline=is_inline,
+    )
+
+
+# ---------------------------------------------------------------------------
+# test_composition_no_enrichment
+# ---------------------------------------------------------------------------
+
+class TestCompositionNoEnrichment:
+    """No math/images → output equals input."""
+
+    def test_empty_markdown_returns_empty(self):
+        pipeline = _make_pipeline()
+        result = pipeline.compose(_enriched(""))
+        assert result == ""
+
+    def test_plain_markdown_returned_unchanged(self):
+        pipeline = _make_pipeline()
+        md = "# Hello\n\nThis is a paragraph.\n"
+        result = pipeline.compose(_enriched(md))
+        assert result == md
+
+    def test_no_math_no_images_identity(self):
+        pipeline = _make_pipeline()
+        md = "Some text without math or images."
+        result = pipeline.compose(_enriched(md))
+        assert result == md
+
+
+# ---------------------------------------------------------------------------
+# test_composition_with_images
+# ---------------------------------------------------------------------------
+
+class TestCompositionWithImages:
+    """Image refs → markdown image links + index."""
+
+    def test_single_image_appended(self):
+        pipeline = _make_pipeline(references_generate_index=False)
+        img = _image(position=0, file_path="/out/fig1.png")
+        result = pipeline.compose(_enriched("Some text.", images=[img]))
+        assert "![](/out/fig1.png)" in result
+
+    def test_image_with_caption_and_label(self):
+        pipeline = _make_pipeline(references_generate_index=False)
+        img = _image(
+            position=0,
+            file_path="/out/fig1.png",
+            caption="My caption",
+            reference_label="Figure 1",
+        )
+        result = pipeline.compose(_enriched("Text.", images=[img]))
+        assert "![Figure 1: My caption](/out/fig1.png)" in result
+
+    def test_image_with_only_label(self):
+        pipeline = _make_pipeline(references_generate_index=False)
+        img = _image(position=0, file_path="/out/fig1.png", reference_label="Fig. 1")
+        result = pipeline.compose(_enriched("Text.", images=[img]))
+        assert "![Fig. 1](/out/fig1.png)" in result
+
+    def test_image_with_only_caption(self):
+        pipeline = _make_pipeline(references_generate_index=False)
+        img = _image(position=0, file_path="/out/fig1.png", caption="A diagram")
+        result = pipeline.compose(_enriched("Text.", images=[img]))
+        assert "![A diagram](/out/fig1.png)" in result
+
+    def test_images_sorted_by_position(self):
+        pipeline = _make_pipeline(references_generate_index=False)
+        img_b = _image(position=100, file_path="/out/img_b.png")
+        img_a = _image(position=10, file_path="/out/img_a.png")
+        result = pipeline.compose(_enriched("Text.", images=[img_b, img_a]))
+        pos_a = result.index("img_a.png")
+        pos_b = result.index("img_b.png")
+        assert pos_a < pos_b
+
+    def test_figure_index_appended_when_enabled(self):
+        pipeline = _make_pipeline(references_generate_index=True)
+        img = _image(
+            position=0,
+            file_path="/out/fig1.png",
+            reference_label="Figure 1",
+            caption="Overview",
+        )
+        result = pipeline.compose(_enriched("Text.", images=[img]))
+        assert "## Figure Index" in result
+        assert "Figure 1" in result
+
+    def test_figure_index_contains_file_column(self):
+        pipeline = _make_pipeline(references_generate_index=True)
+        img = _image(position=0, file_path="/out/fig1.png")
+        result = pipeline.compose(_enriched("Text.", images=[img]))
+        assert "fig1.png" in result
+
+
+# ---------------------------------------------------------------------------
+# test_composition_with_math_standard
+# ---------------------------------------------------------------------------
+
+class TestCompositionWithMathStandard:
+    """Unicode regions → $LaTeX$ (standard style)."""
+
+    def test_unicode_symbol_replaced_standard(self):
+        pipeline = _make_pipeline(latex_style="standard")
+        original = "α + β"
+        md = f"The formula {original} is key."
+        pos = md.index(original)
+        region = _math_region(
+            position=pos,
+            original_text=original,
+            latex=r"\alpha + \beta",
+            is_inline=True,
+        )
+        result = pipeline.compose(_enriched(md, math_regions=[region]))
+        assert r"$\alpha + \beta$" in result
+        assert original not in result
+
+    def test_block_math_standard(self):
+        pipeline = _make_pipeline(latex_style="standard")
+        original = "∑ xᵢ"
+        md = f"Display: {original}"
+        pos = md.index(original)
+        region = _math_region(
+            position=pos,
+            original_text=original,
+            latex=r"\sum x_{i}",
+            is_inline=False,
+        )
+        result = pipeline.compose(_enriched(md, math_regions=[region]))
+        assert r"$$\sum x_{i}$$" in result
+
+    def test_multiple_math_regions_replaced(self):
+        pipeline = _make_pipeline(latex_style="standard")
+        md = "Let α = 1 and β = 2."
+        # Two separate single-symbol regions
+        r1 = _math_region(position=4, original_text="α", latex=r"\alpha")
+        r2 = _math_region(position=13, original_text="β", latex=r"\beta")
+        result = pipeline.compose(_enriched(md, math_regions=[r1, r2]))
+        assert r"$\alpha$" in result
+        assert r"$\beta$" in result
+
+
+# ---------------------------------------------------------------------------
+# test_composition_with_math_github
+# ---------------------------------------------------------------------------
+
+class TestCompositionWithMathGithub:
+    """Unicode regions → $`LaTeX`$ (GitHub style)."""
+
+    def test_inline_math_github_style(self):
+        pipeline = _make_pipeline(latex_style="github")
+        original = "α"
+        md = f"Value {original} here."
+        pos = md.index(original)
+        region = _math_region(
+            position=pos,
+            original_text=original,
+            latex=r"\alpha",
+            is_inline=True,
+        )
+        result = pipeline.compose(_enriched(md, math_regions=[region]))
+        assert r"$`\alpha`$" in result
+
+    def test_block_math_github_style(self):
+        pipeline = _make_pipeline(latex_style="github")
+        original = "∑ n"
+        md = f"Formula: {original}."
+        pos = md.index(original)
+        region = _math_region(
+            position=pos,
+            original_text=original,
+            latex=r"\sum n",
+            is_inline=False,
+        )
+        result = pipeline.compose(_enriched(md, math_regions=[region]))
+        assert "```math" in result
+        assert r"\sum n" in result
+
+
+# ---------------------------------------------------------------------------
+# test_composition_no_index_when_disabled
+# ---------------------------------------------------------------------------
+
+class TestCompositionNoIndexWhenDisabled:
+    """references_generate_index=False → no ## Figure Index appended."""
+
+    def test_no_index_when_disabled(self):
+        pipeline = _make_pipeline(references_generate_index=False)
+        img = _image(position=0, file_path="/out/fig1.png", reference_label="Figure 1")
+        result = pipeline.compose(_enriched("Text.", images=[img]))
+        assert "## Figure Index" not in result
+
+    def test_image_links_still_present_when_index_disabled(self):
+        pipeline = _make_pipeline(references_generate_index=False)
+        img = _image(position=0, file_path="/out/fig1.png")
+        result = pipeline.compose(_enriched("Text.", images=[img]))
+        assert "fig1.png" in result
+
+    def test_no_index_on_empty_images(self):
+        pipeline = _make_pipeline(references_generate_index=True)
+        result = pipeline.compose(_enriched("Text."))
+        assert "## Figure Index" not in result
