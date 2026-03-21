@@ -19,7 +19,8 @@ dependencies = [
 ocr = ["pix2tex>=0.1.1"]
 nougat = ["nougat-ocr"]
 llm = ["openai>=1.0.0", "anthropic"]
-all = ["scimarkdown[ocr]", "scimarkdown[nougat]", "scimarkdown[llm]"]
+embeddings = ["google-genai>=1.0.0"]
+all = ["scimarkdown[ocr]", "scimarkdown[nougat]", "scimarkdown[llm]", "scimarkdown[embeddings]"]
 
 [project.scripts]
 scimarkdown = "scimarkdown.__main__:main"
