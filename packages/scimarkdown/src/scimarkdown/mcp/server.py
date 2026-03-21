@@ -18,6 +18,20 @@ from scimarkdown.models import MathRegion, ImageRef
 from scimarkdown.mcp.serializers import math_region_to_dict, image_ref_to_dict
 
 
+def _get_embedding_client():
+    """Return a GeminiEmbeddingClient if GEMINI_API_KEY is set, else None."""
+    import os
+    from pathlib import Path
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    try:
+        from scimarkdown.embeddings.client import GeminiEmbeddingClient
+        return GeminiEmbeddingClient(api_key=api_key, cache_dir=Path(".scimarkdown_cache"))
+    except Exception:
+        return None
+
+
 def create_mcp_server() -> FastMCP:
     """Create and return a configured FastMCP server instance."""
     mcp = FastMCP("scimarkdown")
@@ -273,6 +287,209 @@ def create_mcp_server() -> FastMCP:
             "latex": result.latex,
             "confidence": result.confidence,
             "engine_used": ocr._resolved_engine,
+        })
+
+    @mcp.tool()
+    def convert_to_scimarkdown_embeddings(
+        uri: str,
+        config: Optional[dict] = None,
+        embedding_options: Optional[dict] = None,
+    ) -> str:
+        """Convert a file to enriched SciMarkdown with embeddings-based enhancements.
+
+        Enables the full embeddings pipeline (math classification, semantic
+        image-text linking) on top of standard SciMarkdown conversion.
+
+        Args:
+            uri: File path or URL to convert.
+            config: Optional SciMarkdown config overrides (nested dicts).
+            embedding_options: Optional embeddings section overrides, e.g.
+                               {"classify_math": True, "semantic_linking": True}.
+
+        Returns:
+            Enriched Markdown text.
+        """
+        sci_config = SciMarkdownConfig()
+        if config:
+            sci_config = sci_config.with_overrides(config)
+        # Force-enable embeddings
+        sci_config.embeddings_enabled = True
+        if embedding_options:
+            sci_config = sci_config.with_overrides({"embeddings": embedding_options})
+
+        converter = EnhancedMarkItDown(sci_config=sci_config)
+        result = converter.convert(uri)
+        return result.markdown or ""
+
+    @mcp.tool()
+    def analyze_document(uri: str, analysis_type: Optional[str] = None) -> str:
+        """Analyze a document for math regions and document type.
+
+        Converts the document, detects math regions, and optionally classifies
+        the document type using embeddings.
+
+        Args:
+            uri: File path or URL to analyze.
+            analysis_type: Optional analysis type — "full" (includes document
+                           classification via embeddings) or None for basic.
+
+        Returns:
+            JSON object with keys:
+            - "document": {"uri": ..., "type": ...}
+            - "math_regions": list of math region dicts
+            - "document_category": (str, if analysis_type="full" and client available)
+            - "category_confidence": (float, if analysis_type="full" and client available)
+        """
+        from pathlib import Path as _Path
+
+        file_path = _Path(uri)
+        detector = MathDetector()
+
+        # Convert to markdown first
+        converter = MarkItDown()
+        result = converter.convert(uri)
+        markdown = result.markdown or ""
+
+        math_regions = detector.detect(markdown)
+
+        output: dict = {
+            "document": {
+                "uri": uri,
+                "name": file_path.name,
+                "extension": file_path.suffix,
+            },
+            "math_regions": [math_region_to_dict(r) for r in math_regions],
+        }
+
+        if analysis_type == "full":
+            client = _get_embedding_client()
+            if client is not None:
+                try:
+                    from scimarkdown.embeddings.document_classifier import DocumentClassifier
+                    clf = DocumentClassifier(client=client)
+                    category, confidence = clf.classify(markdown)
+                    output["document_category"] = category
+                    output["category_confidence"] = confidence
+                except Exception:
+                    pass
+
+        return json.dumps(output)
+
+    @mcp.tool()
+    def search_content(uri: str, query: str, top_k: int = 5) -> str:
+        """Semantically search a document for the most relevant sections.
+
+        Converts the document, builds a semantic index using embeddings, and
+        returns the top-k most relevant chunks for the query.
+
+        Args:
+            uri: File path or URL to search.
+            query: Natural language search query.
+            top_k: Number of results to return (default 5).
+
+        Returns:
+            JSON array of result dicts with keys: text, type, similarity.
+            Returns an empty array if embeddings are unavailable.
+        """
+        client = _get_embedding_client()
+        if client is None:
+            return json.dumps([])
+
+        try:
+            converter = MarkItDown()
+            result = converter.convert(uri)
+            markdown = result.markdown or ""
+
+            from scimarkdown.embeddings.content_indexer import ContentIndexer
+            indexer = ContentIndexer(client=client)
+            idx = indexer.index(markdown)
+            results = indexer.search(idx, query, top_k=top_k)
+            return json.dumps(results)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    @mcp.tool()
+    def compare_sections(uris_json: str, granularity: Optional[str] = None) -> str:
+        """Compare sections across multiple documents using semantic similarity.
+
+        Converts each document, builds a content index, and returns a comparison
+        report showing common topics and similarity scores between documents.
+
+        Args:
+            uris_json: JSON array of file paths or URLs to compare.
+            granularity: Comparison granularity — "heading" to compare only
+                         headings, or None for all chunk types.
+
+        Returns:
+            JSON object with:
+            - "documents": list of {"uri": ..., "chunk_count": ...}
+            - "topics": list of {"text": ..., "type": ..., "similarity": ...,
+                                 "found_in": [uri, ...]}
+        """
+        uris: list[str] = json.loads(uris_json)
+        client = _get_embedding_client()
+
+        doc_infos: list[dict] = []
+        all_chunks: list[dict] = []  # enriched with source uri
+
+        for uri in uris:
+            try:
+                converter = MarkItDown()
+                result = converter.convert(uri)
+                markdown = result.markdown or ""
+
+                if client is not None:
+                    from scimarkdown.embeddings.content_indexer import ContentIndexer
+                    indexer = ContentIndexer(client=client)
+                    idx = indexer.index(markdown)
+                    chunks = idx.chunks
+                    embeddings = idx.embeddings
+                else:
+                    chunks = []
+                    embeddings = []
+
+                if granularity == "heading":
+                    filtered = [
+                        (c, e) for c, e in zip(chunks, embeddings)
+                        if c.get("type") == "heading"
+                    ]
+                    chunks = [c for c, _ in filtered]
+                    embeddings = [e for _, e in filtered]
+
+                doc_infos.append({"uri": uri, "chunk_count": len(chunks)})
+                for chunk, emb in zip(chunks, embeddings):
+                    all_chunks.append({**chunk, "uri": uri, "_emb": emb})
+            except Exception as exc:
+                doc_infos.append({"uri": uri, "error": str(exc)})
+
+        # Find common topics: chunks from different documents with high similarity
+        topics: list[dict] = []
+        if client is not None and len(all_chunks) > 1:
+            seen = set()
+            for i, chunk_a in enumerate(all_chunks):
+                if i in seen:
+                    continue
+                best_sim = -1.0
+                best_j = -1
+                for j, chunk_b in enumerate(all_chunks):
+                    if i == j or chunk_a["uri"] == chunk_b["uri"]:
+                        continue
+                    sim = client.similarity(chunk_a["_emb"], chunk_b["_emb"])
+                    if sim > best_sim:
+                        best_sim = sim
+                        best_j = j
+                if best_j >= 0 and best_sim > 0.5:
+                    seen.add(best_j)
+                    topics.append({
+                        "text": chunk_a["text"],
+                        "type": chunk_a["type"],
+                        "similarity": best_sim,
+                        "found_in": [chunk_a["uri"], all_chunks[best_j]["uri"]],
+                    })
+
+        return json.dumps({
+            "documents": doc_infos,
+            "topics": topics,
         })
 
     return mcp
