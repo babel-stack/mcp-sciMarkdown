@@ -53,3 +53,69 @@ def test_reference_patterns_default():
     config = SciMarkdownConfig()
     assert len(config.references_patterns) == 5
     assert any("Fig" in p for p in config.references_patterns)
+
+
+# --- Embeddings configuration ---
+
+def test_embeddings_defaults():
+    config = SciMarkdownConfig()
+    assert config.embeddings_enabled is False
+    assert config.embeddings_provider == "gemini"
+    assert config.embeddings_model == "gemini-embedding-2-preview"
+    assert config.embeddings_api_key_env == "GEMINI_API_KEY"
+    assert config.embeddings_dimensions == 768
+    assert config.embeddings_classify_math is True
+    assert config.embeddings_semantic_linking is True
+    assert config.embeddings_classify_document is True
+    assert config.embeddings_content_indexing is False
+    assert config.embeddings_cache_enabled is True
+    assert config.embeddings_cache_dir == ".scimarkdown_cache"
+    assert config.embeddings_cache_ttl_days == 30
+    assert config.embeddings_math_similarity_threshold == 0.75
+    assert config.embeddings_image_link_threshold == 0.60
+    assert config.embeddings_max_per_document == 500
+    assert config.embeddings_batch_size == 100
+
+
+def test_embeddings_from_dict():
+    config = SciMarkdownConfig.from_dict({
+        "embeddings": {
+            "enabled": True,
+            "provider": "gemini",
+            "model": "custom-model",
+            "api_key_env": "MY_GEMINI_KEY",
+            "dimensions": 1024,
+            "classify_math": False,
+            "semantic_linking": False,
+            "classify_document": False,
+            "content_indexing": True,
+            "cache_enabled": False,
+            "cache_dir": "/tmp/emb_cache",
+            "cache_ttl_days": 7,
+            "math_similarity_threshold": 0.80,
+            "image_link_threshold": 0.70,
+            "max_per_document": 200,
+            "batch_size": 50,
+        }
+    })
+    assert config.embeddings_enabled is True
+    assert config.embeddings_model == "custom-model"
+    assert config.embeddings_api_key_env == "MY_GEMINI_KEY"
+    assert config.embeddings_dimensions == 1024
+    assert config.embeddings_classify_math is False
+    assert config.embeddings_content_indexing is True
+    assert config.embeddings_cache_enabled is False
+    assert config.embeddings_cache_dir == "/tmp/emb_cache"
+    assert config.embeddings_cache_ttl_days == 7
+    assert config.embeddings_math_similarity_threshold == 0.80
+    assert config.embeddings_image_link_threshold == 0.70
+    assert config.embeddings_max_per_document == 200
+    assert config.embeddings_batch_size == 50
+
+
+def test_embeddings_override():
+    base = SciMarkdownConfig()
+    config = base.with_overrides({"embeddings": {"enabled": True, "cache_ttl_days": 14}})
+    assert config.embeddings_enabled is True
+    assert config.embeddings_cache_ttl_days == 14
+    assert config.embeddings_model == "gemini-embedding-2-preview"  # unchanged

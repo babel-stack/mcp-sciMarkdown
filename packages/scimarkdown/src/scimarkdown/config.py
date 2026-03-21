@@ -61,6 +61,24 @@ class SciMarkdownConfig:
     sync_branch: str = "main"
     sync_check_interval_days: int = 14
 
+    # Embeddings
+    embeddings_enabled: bool = False
+    embeddings_provider: str = "gemini"
+    embeddings_model: str = "gemini-embedding-2-preview"
+    embeddings_api_key_env: str = "GEMINI_API_KEY"
+    embeddings_dimensions: int = 768
+    embeddings_classify_math: bool = True
+    embeddings_semantic_linking: bool = True
+    embeddings_classify_document: bool = True
+    embeddings_content_indexing: bool = False
+    embeddings_cache_enabled: bool = True
+    embeddings_cache_dir: str = ".scimarkdown_cache"
+    embeddings_cache_ttl_days: int = 30
+    embeddings_math_similarity_threshold: float = 0.75
+    embeddings_image_link_threshold: float = 0.60
+    embeddings_max_per_document: int = 500
+    embeddings_batch_size: int = 100
+
     @classmethod
     def from_dict(cls, data: dict) -> "SciMarkdownConfig":
         config = cls()
@@ -104,6 +122,22 @@ class SciMarkdownConfig:
             ("sync", "remote"): "sync_remote",
             ("sync", "branch"): "sync_branch",
             ("sync", "check_interval_days"): "sync_check_interval_days",
+            ("embeddings", "enabled"): "embeddings_enabled",
+            ("embeddings", "provider"): "embeddings_provider",
+            ("embeddings", "model"): "embeddings_model",
+            ("embeddings", "api_key_env"): "embeddings_api_key_env",
+            ("embeddings", "dimensions"): "embeddings_dimensions",
+            ("embeddings", "classify_math"): "embeddings_classify_math",
+            ("embeddings", "semantic_linking"): "embeddings_semantic_linking",
+            ("embeddings", "classify_document"): "embeddings_classify_document",
+            ("embeddings", "content_indexing"): "embeddings_content_indexing",
+            ("embeddings", "cache_enabled"): "embeddings_cache_enabled",
+            ("embeddings", "cache_dir"): "embeddings_cache_dir",
+            ("embeddings", "cache_ttl_days"): "embeddings_cache_ttl_days",
+            ("embeddings", "math_similarity_threshold"): "embeddings_math_similarity_threshold",
+            ("embeddings", "image_link_threshold"): "embeddings_image_link_threshold",
+            ("embeddings", "max_per_document"): "embeddings_max_per_document",
+            ("embeddings", "batch_size"): "embeddings_batch_size",
         }
         for (section, key), attr in mapping.items():
             if section in data and key in data[section]:
