@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import IO, Optional
 
@@ -10,6 +11,34 @@ from scimarkdown.config import SciMarkdownConfig
 from scimarkdown.models import EnrichedResult
 
 logger = logging.getLogger(__name__)
+
+
+def _create_embedding_client(config: SciMarkdownConfig) -> Optional[object]:
+    """Create a GeminiEmbeddingClient if embeddings are enabled and an API key is available.
+
+    Returns ``None`` if embeddings are disabled or the API key is missing.
+    """
+    if not config.embeddings_enabled:
+        return None
+
+    api_key = os.environ.get(config.embeddings_api_key_env)
+    if not api_key:
+        logger.debug(
+            "Embeddings enabled but %r env var not set — skipping.", config.embeddings_api_key_env
+        )
+        return None
+
+    try:
+        from scimarkdown.embeddings.client import GeminiEmbeddingClient
+        cache_dir = Path(config.embeddings_cache_dir)
+        return GeminiEmbeddingClient(
+            api_key=api_key,
+            cache_dir=cache_dir,
+            model=config.embeddings_model,
+        )
+    except Exception as exc:
+        logger.warning("Could not create embedding client: %s", exc)
+        return None
 
 _IMAGE_FORMATS: dict[str, str] = {
     ".pdf": "extract_from_pdf",
@@ -96,6 +125,23 @@ class EnrichmentPipeline:
         result.math_regions = math_regions
 
         # ---------------------------------------------------------------
+        # Embedding enrichment (math classifier + semantic linker)
+        # ---------------------------------------------------------------
+        embedding_client = _create_embedding_client(self.config)
+
+        if embedding_client is not None and result.math_regions:
+            if self.config.embeddings_classify_math:
+                try:
+                    from scimarkdown.embeddings.math_classifier import MathClassifier
+                    classifier = MathClassifier(
+                        client=embedding_client,
+                        threshold=self.config.embeddings_math_similarity_threshold,
+                    )
+                    result.math_regions = classifier.classify(result.math_regions)
+                except Exception as exc:
+                    logger.warning("MathClassifier failed, keeping original regions: %s", exc)
+
+        # ---------------------------------------------------------------
         # Image extraction
         # ---------------------------------------------------------------
         method_name = _IMAGE_FORMATS.get(file_extension.lower())
@@ -131,5 +177,25 @@ class EnrichmentPipeline:
                     )
 
             result.images = images
+
+        # ---------------------------------------------------------------
+        # Semantic linking — images to text
+        # ---------------------------------------------------------------
+        if embedding_client is not None and self.config.embeddings_semantic_linking:
+            try:
+                from scimarkdown.embeddings.semantic_linker import SemanticLinker
+                # Extract text paragraphs from the base markdown for linking.
+                import re
+                paragraphs = [
+                    p.strip() for p in re.split(r"\n\s*\n", base_markdown)
+                    if p.strip() and not p.strip().startswith("#")
+                ]
+                linker = SemanticLinker(
+                    client=embedding_client,
+                    threshold=self.config.embeddings_image_link_threshold,
+                )
+                result.images = linker.link(result.images, paragraphs)
+            except Exception as exc:
+                logger.warning("SemanticLinker failed: %s", exc)
 
         return result
