@@ -45,22 +45,28 @@ class TestToolRegistration:
             "build_figure_index",
             "ocr_formula",
         }
-        assert expected == registered
+        assert expected.issubset(registered)
 
     def test_tool_count_is_eight(self):
         server = _get_server()
-        assert len(server._tool_manager._tools) == 8
+        # 8 original tools + 4 embedding tools = 12
+        assert len(server._tool_manager._tools) == 12
 
     def test_tool_names_list(self):
         server = _get_server()
         names = list(server._tool_manager._tools.keys())
-        assert len(names) == 8
+        assert len(names) == 12
         assert "detect_math" in names
         assert "format_latex" in names
         assert "extract_images" in names
         assert "link_references" in names
         assert "build_figure_index" in names
         assert "ocr_formula" in names
+        # Embedding tools
+        assert "convert_to_scimarkdown_embeddings" in names
+        assert "analyze_document" in names
+        assert "search_content" in names
+        assert "compare_sections" in names
 
 
 class TestMathPipeline:
