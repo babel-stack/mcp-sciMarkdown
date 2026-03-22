@@ -121,6 +121,82 @@ class TestCleanEmptyLines:
         assert result == text
 
 
+class TestCleanIntraParagraphBreaks:
+    def setup_method(self):
+        self.cleaner = TextCleaner()
+
+    def test_merges_wrapped_lines(self):
+        text = "line one\nline two\nline three"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == "line one line two line three"
+
+    def test_preserves_paragraph_breaks(self):
+        text = "Para one line a\nline b\n\nPara two line c\nline d"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == "Para one line a line b\n\nPara two line c line d"
+
+    def test_preserves_headings(self):
+        text = "# Heading\nstuff"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == "# Heading\nstuff"
+
+    def test_preserves_list_items(self):
+        text = "- item one\n- item two\n- item three"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == "- item one\n- item two\n- item three"
+
+    def test_preserves_numbered_list(self):
+        text = "1. first\n2. second\n3. third"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == "1. first\n2. second\n3. third"
+
+    def test_preserves_star_list(self):
+        text = "* item a\n* item b"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == "* item a\n* item b"
+
+    def test_preserves_tables(self):
+        text = "| col1 | col2 |\n| a | b |"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == "| col1 | col2 |\n| a | b |"
+
+    def test_preserves_images(self):
+        text = "![alt](img.png)\nsome text"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == "![alt](img.png)\nsome text"
+
+    def test_preserves_code_blocks(self):
+        text = "```python\ndef foo():\n    pass\n```"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == text
+
+    def test_empty_string(self):
+        assert self.cleaner.clean_intra_paragraph_breaks("") == ""
+
+    def test_real_world_pdf_wrapping(self):
+        text = (
+            "Se autoriza la reproducción de esta publicación con fines\n"
+            "educativos y otros que no sean comerciales sin permiso\n"
+            "escrito previo detentar el derecho de autor, mencionando la cita."
+        )
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert "\n" not in result
+        assert "fines educativos" in result
+
+    def test_mixed_content(self):
+        text = (
+            "# Heading\n\n"
+            "Wrapped line one\nline two\n\n"
+            "- list item\n\n"
+            "| a | b |\n| c | d |"
+        )
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert "# Heading" in result
+        assert "Wrapped line one line two" in result
+        assert "- list item" in result
+        assert "| a | b |\n| c | d |" in result
+
+
 class TestProcess:
     def setup_method(self):
         self.cleaner = TextCleaner()
@@ -138,3 +214,8 @@ class TestProcess:
         text = "Normal markdown content.\n\nAnother paragraph."
         result = self.cleaner.process(text)
         assert result == text
+
+    def test_process_merges_wrapped_lines(self):
+        text = "First line of para\nsecond line of para"
+        result = self.cleaner.process(text)
+        assert result == "First line of para second line of para"

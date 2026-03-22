@@ -31,6 +31,60 @@ class TextCleaner:
 
         return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', _replace_path, markdown)
 
+    def clean_intra_paragraph_breaks(self, markdown: str) -> str:
+        """Merge single newlines within paragraphs into spaces.
+
+        PDF converters often preserve the original line wrapping from the PDF,
+        producing single ``\\n`` within what should be a single markdown paragraph.
+        This method joins those wrapped lines with a space.
+
+        Lines that are structural markdown (headings, lists, tables, images,
+        code blocks) are left untouched.
+        """
+        if not markdown:
+            return markdown
+
+        paragraphs = markdown.split('\n\n')
+        cleaned: list[str] = []
+
+        in_code_block = False
+
+        for para in paragraphs:
+            # Track code blocks across paragraphs
+            fence_count = para.count('```')
+            if in_code_block:
+                cleaned.append(para)
+                if fence_count % 2 == 1:
+                    in_code_block = False
+                continue
+            if fence_count % 2 == 1:
+                in_code_block = True
+                cleaned.append(para)
+                continue
+            # If the paragraph contains a code fence pair, leave it alone
+            if fence_count > 0:
+                cleaned.append(para)
+                continue
+
+            stripped = para.strip()
+            # Check if this paragraph is structural markdown
+            if (
+                stripped.startswith('#')
+                or stripped.startswith('![')
+                or stripped.startswith('|')
+                or stripped.startswith('- ')
+                or stripped.startswith('* ')
+                or re.match(r'^\d+\.\s', stripped)
+            ):
+                cleaned.append(para)
+                continue
+
+            # Merge single newlines into spaces
+            merged = re.sub(r'\n', ' ', para)
+            cleaned.append(merged)
+
+        return '\n\n'.join(cleaned)
+
     def clean_empty_lines(self, markdown: str) -> str:
         """Collapse 3+ consecutive empty lines into 2."""
         return re.sub(r'\n{4,}', '\n\n\n', markdown)
@@ -39,5 +93,6 @@ class TextCleaner:
         """Run all text cleaning steps."""
         markdown = self.clean_cid(markdown)
         markdown = self.normalize_image_paths(markdown)
+        markdown = self.clean_intra_paragraph_breaks(markdown)
         markdown = self.clean_empty_lines(markdown)
         return markdown
