@@ -5,5 +5,6 @@ from .repeated_text import RepeatedTextFilter
 from .page_numbers import PageNumberFilter
 from .decorative_images import DecorativeImageFilter
 from .toc_processor import TocProcessor
+from .heading_detector import HeadingDetector
 
-__all__ = ["NoiseFilter", "RepeatedTextFilter", "PageNumberFilter", "DecorativeImageFilter", "TocProcessor"]
+__all__ = ["NoiseFilter", "RepeatedTextFilter", "PageNumberFilter", "DecorativeImageFilter", "TocProcessor", "HeadingDetector"]
