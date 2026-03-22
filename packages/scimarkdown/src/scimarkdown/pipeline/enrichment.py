@@ -163,6 +163,34 @@ class EnrichmentPipeline:
                 images = []
 
             # ---------------------------------------------------------------
+            # Noise filtering (headers, footers, page numbers, decorative images)
+            # ---------------------------------------------------------------
+            if self.config.filters_enabled:
+                try:
+                    from scimarkdown.filters.noise_filter import NoiseFilter
+                    noise_filter = NoiseFilter(self.config)
+
+                    # Extract page blocks for text noise detection (PDF only)
+                    source_stream.seek(0)
+                    page_blocks = noise_filter.extract_page_blocks(source_stream, file_extension)
+                    source_stream.seek(0)
+
+                    if page_blocks:
+                        noise_strings = noise_filter.detect_noise(page_blocks)
+                        if noise_strings:
+                            base_markdown = noise_filter.clean_text(base_markdown, noise_strings)
+                            result.base_markdown = base_markdown
+                            logger.info("Removed %d noise strings", len(noise_strings))
+
+                    # Filter decorative images
+                    if images:
+                        images = noise_filter.filter_images(images)
+                        logger.info("After decorative filter: %d images", len(images))
+
+                except Exception as e:
+                    logger.warning("Noise filtering failed: %s", e)
+
+            # ---------------------------------------------------------------
             # Reference linking
             # ---------------------------------------------------------------
             if images:
