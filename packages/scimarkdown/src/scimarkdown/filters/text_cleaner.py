@@ -90,9 +90,14 @@ class TextCleaner:
         return re.sub(r'\n{4,}', '\n\n\n', markdown)
 
     def process(self, markdown: str) -> str:
-        """Run all text cleaning steps."""
+        """Run all text cleaning steps.
+
+        Note: ``clean_intra_paragraph_breaks`` is NOT called here because it
+        must run AFTER noise filtering (repeated-line removal needs the
+        original single-newline structure intact).  The enrichment pipeline
+        calls it explicitly at the right point.
+        """
         markdown = self.clean_cid(markdown)
         markdown = self.normalize_image_paths(markdown)
-        markdown = self.clean_intra_paragraph_breaks(markdown)
         markdown = self.clean_empty_lines(markdown)
         return markdown

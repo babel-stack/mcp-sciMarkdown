@@ -215,7 +215,8 @@ class TestProcess:
         result = self.cleaner.process(text)
         assert result == text
 
-    def test_process_merges_wrapped_lines(self):
+    def test_process_does_not_merge_lines(self):
+        """Line merging is NOT part of process() — it runs separately after noise filtering."""
         text = "First line of para\nsecond line of para"
         result = self.cleaner.process(text)
-        assert result == "First line of para second line of para"
+        assert result == text  # Lines preserved for noise filter to work on

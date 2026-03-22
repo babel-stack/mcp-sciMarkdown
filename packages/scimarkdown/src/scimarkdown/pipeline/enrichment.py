@@ -228,6 +228,16 @@ class EnrichmentPipeline:
                 except Exception as e:
                     logger.warning("Noise filtering failed: %s", e)
 
+                # Merge intra-paragraph line breaks AFTER noise filtering
+                # (the repeated-line filter needs single-newline structure intact)
+                try:
+                    from scimarkdown.filters.text_cleaner import TextCleaner
+                    cleaner = TextCleaner()
+                    base_markdown = cleaner.clean_intra_paragraph_breaks(base_markdown)
+                    result.base_markdown = base_markdown
+                except Exception as e:
+                    logger.warning("Intra-paragraph break cleaning failed: %s", e)
+
             # ---------------------------------------------------------------
             # Reference linking
             # ---------------------------------------------------------------
