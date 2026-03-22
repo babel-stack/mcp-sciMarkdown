@@ -59,6 +59,7 @@ For all $`x \in \mathbb{R}`$, the sum $`\sum_{i} x_{i} \leq \int f(x)dx`$ holds.
 - Automatic white border cropping with configurable margins
 - Images are inserted **at their original position** in the document, anchored to preceding text
 - **Naming convention:** `{document}_img{00001}.png` (5 digits)
+- **Relative paths:** Image paths in the markdown are relative filenames (not absolute paths), making the markdown portable
 
 ### Noise filtering
 
@@ -66,6 +67,9 @@ For all $`x \in \mathbb{R}`$, the sum $`\sum_{i} x_{i} \leq \int f(x)dx`$ holds.
 - **Page numbers** — detects sequential numbers in boundary blocks
 - **Decorative images** — filters images smaller than 30px, extreme aspect ratio (>8:1), or repeated
 - **Table of Contents** — detects TOC and converts entries to markdown hyperlinks
+- **HeadingDetector** — detects chapter/section patterns ("Capítulo N.", "N.N. Title") and converts them to markdown headings (#, ##, ###)
+- **TextCleaner** — removes CID encoding artifacts from PDFs, converts absolute image paths to relative filenames, merges intra-paragraph PDF line breaks while preserving key-value structures
+- **Repeated paragraph removal** — removes paragraphs that appear 3+ times in the document (headers/footers that slip through page-level detection)
 
 **Before:**
 ```
@@ -560,6 +564,12 @@ filters:
   max_header_length: 100          # Max chars for header candidate
   min_image_size: 30              # Min px to keep an image
   max_image_aspect_ratio: 8.0     # Max ratio before flagging as decorative
+  # (These are automatic, no config needed:)
+  # heading_detection: automatic
+  # cid_cleaning: automatic
+  # path_normalization: automatic
+  # line_break_merging: automatic (preserves key-value structures)
+  # repeated_paragraph_removal: min 3 occurrences
 
 # ── References ─────────────────────────────────────────────
 references:
@@ -625,6 +635,8 @@ Source document
 │  │ Noise Filters (OFFLINE)               │      │
 │  │  RepeatedText · PageNumbers           │      │
 │  │  DecorativeImages · TocProcessor      │      │
+│  │  HeadingDetector · TextCleaner        │      │
+│  │  RepeatedParagraphs                    │      │
 │  └──────────────────┬─────────────────────┘      │
 │                     ▼                            │
 │  ┌────────────────────────────────────────┐      │
@@ -648,6 +660,20 @@ Source document
 └─────────────────────────┘
 ```
 
+### Project structure
+
+```
+packages/scimarkdown/
+│       ├── filters/
+│       │   ├── noise_filter.py         ← Orchestrator + repeated paragraph removal
+│       │   ├── repeated_text.py        ← Header/footer detection by page position
+│       │   ├── page_numbers.py         ← Sequential page number detection
+│       │   ├── decorative_images.py    ← Small/narrow/repeated image filter
+│       │   ├── toc_processor.py        ← TOC → hyperlinks conversion
+│       │   ├── heading_detector.py     ← Chapter/section → markdown headings
+│       │   └── text_cleaner.py         ← CID removal, path normalization, line merging
+```
+
 ### Minimal fork strategy
 
 - **0 lines modified** in MarkItDown source code
@@ -669,6 +695,9 @@ SciMarkdown never crashes on a conversion. If enrichment fails, it always return
 | SemanticLinker | Gemini API down | Skips semantic linking, uses ordinal ReferenceLinker |
 | NoiseFilter | PDF parsing fails | Skips filtering, keeps all content |
 | TocProcessor | No TOC detected | No changes |
+| HeadingDetector | No patterns match | Text unchanged |
+| TextCleaner | Processing fails | Text unchanged |
+| RepeatedParagraphs | Detection fails | All paragraphs kept |
 | ImageExtractor | Cannot extract | Skips image, logs warning |
 | LLM Fallback | API down/timeout | Skips LLM, continues with local results |
 | Full pipeline | Unexpected exception | Returns base markdown unchanged |
@@ -682,7 +711,7 @@ SciMarkdown never crashes on a conversion. If enrichment fails, it always return
 ```bash
 source .venv/bin/activate
 
-# All tests (409)
+# All tests (790)
 python -m pytest tests/ -v --ignore=tests/upstream
 
 # By module

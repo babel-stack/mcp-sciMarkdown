@@ -59,6 +59,7 @@ Para todo $`x \in \mathbb{R}`$, la suma $`\sum_{i} x_{i} \leq \int f(x)dx`$ se c
 - Recorte automático de bordes blancos con márgenes configurables
 - Las imágenes se insertan **en la posición original** del documento, ancladas al texto que las precede
 - **Convención de nombres:** `{documento}_img{00001}.png` (5 dígitos)
+- **Rutas relativas:** Las rutas de imagen en el markdown son nombres de fichero relativos (no rutas absolutas), lo que hace el markdown portable
 
 ### Filtrado de ruido
 
@@ -66,6 +67,9 @@ Para todo $`x \in \mathbb{R}`$, la suma $`\sum_{i} x_{i} \leq \int f(x)dx`$ se c
 - **Números de página** — detecta secuencias numéricas en bloques frontera
 - **Imágenes decorativas** — filtra imágenes pequeñas (<30px), muy estrechas (ratio >8:1) o repetidas
 - **Índices (TOC)** — detecta tablas de contenidos y las convierte en hiperenlaces markdown
+- **HeadingDetector** — detecta patrones de capítulo/sección ("Capítulo N.", "N.N. Título") y los convierte en encabezados markdown (#, ##, ###)
+- **TextCleaner** — elimina artefactos de codificación CID de los PDF, convierte rutas absolutas de imágenes en nombres de fichero relativos, fusiona saltos de línea intra-párrafo del PDF preservando estructuras clave-valor
+- **Eliminación de párrafos repetidos** — elimina párrafos que aparecen 3+ veces en el documento (cabeceras/pies que escapan a la detección por página)
 
 **Antes:**
 ```
@@ -560,6 +564,12 @@ filters:
   max_header_length: 100          # Máx. caracteres para candidato a cabecera
   min_image_size: 30              # Mín. px para conservar una imagen
   max_image_aspect_ratio: 8.0     # Ratio máximo antes de marcar como decorativa
+  # (Estos son automáticos, sin configuración necesaria:)
+  # heading_detection: automático
+  # cid_cleaning: automático
+  # path_normalization: automático
+  # line_break_merging: automático (preserva estructuras clave-valor)
+  # repeated_paragraph_removal: mín. 3 ocurrencias
 
 # ── Referencias ─────────────────────────────────────────────
 references:
@@ -625,6 +635,8 @@ Documento fuente
 │  │ Filtros de ruido (OFFLINE)            │      │
 │  │  RepeatedText · PageNumbers           │      │
 │  │  DecorativeImages · TocProcessor      │      │
+│  │  HeadingDetector · TextCleaner        │      │
+│  │  RepeatedParagraphs                    │      │
 │  └──────────────────┬─────────────────────┘      │
 │                     ▼                            │
 │  ┌────────────────────────────────────────┐      │
@@ -648,6 +660,20 @@ Documento fuente
 └─────────────────────────┘
 ```
 
+### Estructura del proyecto
+
+```
+packages/scimarkdown/
+│       ├── filters/
+│       │   ├── noise_filter.py         ← Orquestrador + eliminación de párrafos repetidos
+│       │   ├── repeated_text.py        ← Detección de cabecera/pie por posición de página
+│       │   ├── page_numbers.py         ← Detección de números de página secuenciales
+│       │   ├── decorative_images.py    ← Filtro de imágenes pequeñas/estrechas/repetidas
+│       │   ├── toc_processor.py        ← Conversión TOC → hiperenlaces
+│       │   ├── heading_detector.py     ← Capítulo/sección → encabezados markdown
+│       │   └── text_cleaner.py         ← Eliminación CID, normalización de rutas, fusión de líneas
+```
+
 ### Estrategia de fork mínimo
 
 - **0 líneas modificadas** en el código fuente de MarkItDown
@@ -669,6 +695,9 @@ SciMarkdown nunca falla en una conversión. Si el enriquecimiento falla, siempre
 | SemanticLinker | API Gemini caída | Omite vinculación semántica, usa ReferenceLinker ordinal |
 | NoiseFilter | Fallo al parsear PDF | Omite filtrado, mantiene todo el contenido |
 | TocProcessor | No se detecta TOC | Sin cambios |
+| HeadingDetector | Ningún patrón coincide | Texto sin cambios |
+| TextCleaner | El procesamiento falla | Texto sin cambios |
+| RepeatedParagraphs | La detección falla | Se mantienen todos los párrafos |
 | ImageExtractor | No se puede extraer | Omite imagen, registra aviso |
 | LLM Fallback | API caída/timeout | Omite LLM, continúa con resultados locales |
 | Pipeline completo | Excepción inesperada | Devuelve markdown base sin cambios |
@@ -682,7 +711,7 @@ SciMarkdown nunca falla en una conversión. Si el enriquecimiento falla, siempre
 ```bash
 source .venv/bin/activate
 
-# Todos los tests (409)
+# Todos los tests (790)
 python -m pytest tests/ -v --ignore=tests/upstream
 
 # Por módulo

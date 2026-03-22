@@ -59,6 +59,7 @@ Za sve $`x \in \mathbb{R}`$, zbir $`\sum_{i} x_{i} \leq \int f(x)dx`$ važi.
 - Automatsko obrezivanje bijelih rubova sa podesivim marginama
 - Slike se ubacuju **na originalnu poziciju** u dokumentu, usidrene na prethodni tekst
 - **Konvencija imenovanja:** `{dokument}_img{00001}.png` (5 cifara)
+- **Relativne putanje:** Putanje slika u markdownu su relativni nazivi fajlova (ne apsolutne putanje), što čini markdown prenosivim
 
 ### Filtriranje šuma
 
@@ -66,6 +67,9 @@ Za sve $`x \in \mathbb{R}`$, zbir $`\sum_{i} x_{i} \leq \int f(x)dx`$ važi.
 - **Brojevi stranica** — detektuje sekvencijalne brojeve u graničnim blokovima
 - **Dekorativne slike** — filtrira slike manje od 30px, ekstremnog omjera (>8:1) ili ponovljene
 - **Sadržaj (TOC)** — detektuje tabele sadržaja i pretvara ih u markdown hiperveze
+- **HeadingDetector** — detektuje obrasce poglavlja/sekcija ("Capítulo N.", "N.N. Naslov") i pretvara ih u markdown naslove (#, ##, ###)
+- **TextCleaner** — uklanja CID artefakte kodiranja iz PDF-ova, pretvara apsolutne putanje slika u relativne nazive fajlova, spaja intra-paragrafske PDF prijelome redova uz očuvanje struktura ključ-vrijednost
+- **Uklanjanje ponovljenih paragrafa** — uklanja paragrafe koji se pojavljuju 3+ puta u dokumentu (zaglavlja/podnožja koja prođu kroz detekciju na nivou stranice)
 
 **Prije:**
 ```
@@ -560,6 +564,12 @@ filters:
   max_header_length: 100          # Maks. znakova za kandidata zaglavlja
   min_image_size: 30              # Min. px za čuvanje slike
   max_image_aspect_ratio: 8.0     # Maksimalni omjer prije označavanja kao dekorativne
+  # (Ovo je automatsko, nije potrebna konfiguracija:)
+  # heading_detection: automatski
+  # cid_cleaning: automatski
+  # path_normalization: automatski
+  # line_break_merging: automatski (čuva strukture ključ-vrijednost)
+  # repeated_paragraph_removal: min. 3 pojave
 
 # ── Reference ──────────────────────────────────────────────
 references:
@@ -625,6 +635,8 @@ Izvorni dokument
 │  │ Filteri šuma (OFFLINE)                │      │
 │  │  RepeatedText · PageNumbers           │      │
 │  │  DecorativeImages · TocProcessor      │      │
+│  │  HeadingDetector · TextCleaner        │      │
+│  │  RepeatedParagraphs                    │      │
 │  └──────────────────┬─────────────────────┘      │
 │                     ▼                            │
 │  ┌────────────────────────────────────────┐      │
@@ -648,6 +660,20 @@ Izvorni dokument
 └─────────────────────────┘
 ```
 
+### Struktura projekta
+
+```
+packages/scimarkdown/
+│       ├── filters/
+│       │   ├── noise_filter.py         ← Orkestrator + uklanjanje ponovljenih paragrafa
+│       │   ├── repeated_text.py        ← Detekcija zaglavlja/podnožja po poziciji stranice
+│       │   ├── page_numbers.py         ← Detekcija sekvencijalnih brojeva stranica
+│       │   ├── decorative_images.py    ← Filter malih/uskih/ponovljenih slika
+│       │   ├── toc_processor.py        ← Konverzija TOC → hiperveze
+│       │   ├── heading_detector.py     ← Poglavlje/sekcija → markdown naslovi
+│       │   └── text_cleaner.py         ← Uklanjanje CID-a, normalizacija putanja, spajanje redova
+```
+
 ### Strategija minimalnog forka
 
 - **0 modifikovanih linija** u izvornom kodu MarkItDown
@@ -669,6 +695,9 @@ SciMarkdown nikada ne pada na konverziji. Ako obogaćivanje ne uspije, uvijek vr
 | SemanticLinker | Gemini API nije dostupan | Preskače semantičko povezivanje, koristi ordinalni ReferenceLinker |
 | NoiseFilter | Parsiranje PDF-a ne uspije | Preskače filtriranje, zadržava sav sadržaj |
 | TocProcessor | TOC nije detektovan | Bez promjena |
+| HeadingDetector | Nijedan obrazac se ne podudara | Tekst nepromijenjen |
+| TextCleaner | Obrada ne uspije | Tekst nepromijenjen |
+| RepeatedParagraphs | Detekcija ne uspije | Svi paragrafi se čuvaju |
 | ImageExtractor | Ne može ekstrahirati | Preskače sliku, bilježi upozorenje |
 | LLM Fallback | API nije dostupan/timeout | Preskače LLM, nastavlja sa lokalnim rezultatima |
 | Cijeli pipeline | Neočekivani izuzetak | Vraća bazni markdown bez promjena |
@@ -682,7 +711,7 @@ SciMarkdown nikada ne pada na konverziji. Ako obogaćivanje ne uspije, uvijek vr
 ```bash
 source .venv/bin/activate
 
-# Svi testovi (409)
+# Svi testovi (790)
 python -m pytest tests/ -v --ignore=tests/upstream
 
 # Po modulu
