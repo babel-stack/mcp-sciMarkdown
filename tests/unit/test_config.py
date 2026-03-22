@@ -49,6 +49,31 @@ def test_config_override():
     assert config.images_dpi == 300  # unchanged
 
 
+def test_filters_config_defaults():
+    config = SciMarkdownConfig()
+    assert config.filters_enabled is True
+    assert config.filters_repeated_text is True
+    assert config.filters_page_numbers is True
+    assert config.filters_decorative_images is True
+    assert config.filters_min_repeat_pages == 3
+    assert config.filters_max_header_length == 100
+    assert config.filters_position_tolerance == 5.0
+    assert config.filters_min_image_size == 30
+    assert config.filters_max_image_aspect_ratio == 8.0
+    assert config.filters_min_image_repeat == 3
+
+
+def test_filters_config_from_dict():
+    config = SciMarkdownConfig.from_dict({
+        "filters": {
+            "enabled": False,
+            "min_repeat_pages": 5,
+        }
+    })
+    assert config.filters_enabled is False
+    assert config.filters_min_repeat_pages == 5
+
+
 def test_reference_patterns_default():
     config = SciMarkdownConfig()
     assert len(config.references_patterns) == 5

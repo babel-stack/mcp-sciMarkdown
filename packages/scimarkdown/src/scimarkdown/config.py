@@ -61,6 +61,18 @@ class SciMarkdownConfig:
     sync_branch: str = "main"
     sync_check_interval_days: int = 14
 
+    # Filters
+    filters_enabled: bool = True
+    filters_repeated_text: bool = True
+    filters_page_numbers: bool = True
+    filters_decorative_images: bool = True
+    filters_min_repeat_pages: int = 3       # Pages text must repeat to be considered noise
+    filters_max_header_length: int = 100    # Max chars for a header candidate
+    filters_position_tolerance: float = 5.0 # Y-coordinate tolerance in points
+    filters_min_image_size: int = 30        # Min width/height to keep (px)
+    filters_max_image_aspect_ratio: float = 8.0  # Max aspect ratio before flagging as decorative
+    filters_min_image_repeat: int = 3       # Pages image must repeat to be filtered
+
     # Embeddings
     embeddings_enabled: bool = False
     embeddings_provider: str = "gemini"
@@ -122,6 +134,16 @@ class SciMarkdownConfig:
             ("sync", "remote"): "sync_remote",
             ("sync", "branch"): "sync_branch",
             ("sync", "check_interval_days"): "sync_check_interval_days",
+            ("filters", "enabled"): "filters_enabled",
+            ("filters", "repeated_text"): "filters_repeated_text",
+            ("filters", "page_numbers"): "filters_page_numbers",
+            ("filters", "decorative_images"): "filters_decorative_images",
+            ("filters", "min_repeat_pages"): "filters_min_repeat_pages",
+            ("filters", "max_header_length"): "filters_max_header_length",
+            ("filters", "position_tolerance"): "filters_position_tolerance",
+            ("filters", "min_image_size"): "filters_min_image_size",
+            ("filters", "max_image_aspect_ratio"): "filters_max_image_aspect_ratio",
+            ("filters", "min_image_repeat"): "filters_min_image_repeat",
             ("embeddings", "enabled"): "embeddings_enabled",
             ("embeddings", "provider"): "embeddings_provider",
             ("embeddings", "model"): "embeddings_model",
