@@ -5,13 +5,13 @@
 </p>
 
 <p align="center">
-  <a href="#-galego">🇬🇱 Galego</a> · <a href="#-español">🇪🇸 Español</a> · <a href="#-english">🇬🇧 English</a> · <a href="#-bosanski">🇧🇦 Bosanski</a>
+  <a href="#-galego"><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Flag_of_Galicia.svg/20px-Flag_of_Galicia.svg.png" width="16" alt="Galicia"> Galego</a> · <a href="#-español">🇪🇸 Español</a> · <a href="#-english">🇬🇧 English</a> · <a href="#-bosanski">🇧🇦 Bosanski</a>
 </p>
 
 ---
 
 <details open>
-<summary><h2>🇬🇱 Galego</h2></summary>
+<summary><h2><img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Flag_of_Galicia.svg/20px-Flag_of_Galicia.svg.png" width="16" alt="Galicia"> Galego</h2></summary>
 
 SciMarkdown é un fork de [Microsoft MarkItDown](https://github.com/microsoft/markitdown) que amplía as súas capacidades de conversión con catro piares:
 
