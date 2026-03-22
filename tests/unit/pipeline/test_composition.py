@@ -134,6 +134,33 @@ class TestCompositionWithImages:
         pos_b = result.index("img_b.png")
         assert pos_a < pos_b
 
+    def test_image_inserted_inline_at_position(self):
+        """Images should appear near their document position, not all at the end."""
+        pipeline = _make_pipeline(references_generate_index=False)
+        md = "# Introduction\n\nFirst paragraph.\n\n# Methods\n\nSecond paragraph.\n\n# Results\n\nThird paragraph."
+        # Image at position 0 (early) and position 2000 (late)
+        img_early = _image(position=0, file_path="early.png", reference_label="Figure 1")
+        img_late = _image(position=2000, file_path="late.png", reference_label="Figure 2")
+        result = pipeline.compose(_enriched(md, images=[img_early, img_late]))
+
+        # Early image should appear before "Results"
+        pos_early = result.index("early.png")
+        pos_results = result.index("# Results")
+        assert pos_early < pos_results, "Early image should be inserted before Results section"
+
+        # Late image should appear after "Results"
+        pos_late = result.index("late.png")
+        assert pos_late > pos_results, "Late image should be inserted after Results section"
+
+    def test_single_paragraph_image_inline(self):
+        """With a single paragraph, image should be right after it."""
+        pipeline = _make_pipeline(references_generate_index=False)
+        md = "Only one paragraph here."
+        img = _image(position=0, file_path="fig.png")
+        result = pipeline.compose(_enriched(md, images=[img]))
+        assert "Only one paragraph here." in result
+        assert "fig.png" in result
+
     def test_figure_index_appended_when_enabled(self):
         pipeline = _make_pipeline(references_generate_index=True)
         img = _image(

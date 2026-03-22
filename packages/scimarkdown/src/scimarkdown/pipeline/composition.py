@@ -68,28 +68,55 @@ class CompositionPipeline:
 
         # ---------------------------------------------------------------
         # Step 2: Image injection
-        # Append image markdown lines, sorted by position (ascending).
+        # Insert images inline at their approximate document position.
+        #
+        # Strategy: split markdown into paragraphs (by blank lines),
+        # distribute images proportionally across paragraphs based on
+        # their position ratio within the total position range, and
+        # insert each image after its corresponding paragraph.
         # ---------------------------------------------------------------
         if enriched.images:
-            image_lines: list[str] = []
             sorted_images = sorted(enriched.images, key=lambda img: img.position)
-            for img in sorted_images:
-                label = img.reference_label or ""
-                caption = img.caption or ""
-                if label and caption:
-                    alt_text = f"{label}: {caption}"
-                elif label:
-                    alt_text = label
-                elif caption:
-                    alt_text = caption
-                else:
-                    alt_text = ""
-                image_lines.append(f"![{alt_text}]({img.file_path})")
 
-            if image_lines:
-                if markdown and not markdown.endswith("\n"):
-                    markdown += "\n"
-                markdown += "\n".join(image_lines)
+            # Build image markdown lines
+            image_map: dict[int, list[str]] = {}  # paragraph_index → image lines
+            paragraphs = markdown.split("\n\n")
+            num_paragraphs = len(paragraphs)
+
+            if num_paragraphs > 0 and sorted_images:
+                # Determine position range from images
+                min_pos = sorted_images[0].position
+                max_pos = sorted_images[-1].position
+                pos_range = max(max_pos - min_pos, 1)
+
+                for img in sorted_images:
+                    label = img.reference_label or ""
+                    caption = img.caption or ""
+                    if label and caption:
+                        alt_text = f"{label}: {caption}"
+                    elif label:
+                        alt_text = label
+                    elif caption:
+                        alt_text = caption
+                    else:
+                        alt_text = ""
+                    img_line = f"![{alt_text}]({img.file_path})"
+
+                    # Map image position to paragraph index proportionally
+                    ratio = (img.position - min_pos) / pos_range if pos_range > 0 else 0
+                    para_idx = min(int(ratio * num_paragraphs), num_paragraphs - 1)
+
+                    image_map.setdefault(para_idx, []).append(img_line)
+
+                # Rebuild markdown with images inserted after their paragraphs
+                result_parts: list[str] = []
+                for idx, para in enumerate(paragraphs):
+                    result_parts.append(para)
+                    if idx in image_map:
+                        for img_line in image_map[idx]:
+                            result_parts.append(img_line)
+
+                markdown = "\n\n".join(result_parts)
 
         # ---------------------------------------------------------------
         # Step 3: Figure index
