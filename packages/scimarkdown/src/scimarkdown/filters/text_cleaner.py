@@ -91,7 +91,16 @@ class TextCleaner:
                 cleaned.append(para)
                 continue
 
-            # Merge single newlines into spaces
+            # Check if this looks like a key-value block (multiple lines with "Key: Value" pattern)
+            lines = para.split('\n')
+            if len(lines) > 1:
+                kv_count = sum(1 for l in lines if re.match(r'^[A-ZÁÉÍÓÚÑ][^:]{1,30}:', l.strip()))
+                if kv_count >= 2:
+                    # Preserve key-value structure
+                    cleaned.append(para)
+                    continue
+
+            # Merge single newlines into spaces (PDF line wrapping)
             merged = re.sub(r'\n', ' ', para)
             cleaned.append(merged)
 
