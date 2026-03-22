@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import re
 import zipfile
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import IO, Optional
 
 from scimarkdown.config import SciMarkdownConfig
 from scimarkdown.models import ImageRef
+
+logger = logging.getLogger(__name__)
 
 
 class ImageExtractor:
