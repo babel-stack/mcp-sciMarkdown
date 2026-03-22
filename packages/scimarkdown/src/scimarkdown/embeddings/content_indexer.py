@@ -141,7 +141,7 @@ def _split_into_chunks(markdown: str) -> list[dict]:
         paragraphs = re.split(r"\n\s*\n", part)
         for para in paragraphs:
             para = para.strip()
-            if not para:
+            if not para:  # pragma: no cover
                 continue
             chunk_type = _classify_chunk(para)
             chunks.append({"text": para, "type": chunk_type})

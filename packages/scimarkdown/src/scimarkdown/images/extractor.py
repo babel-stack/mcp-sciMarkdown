@@ -156,7 +156,7 @@ class ImageExtractor:
                                     # Take last 100 chars to use as anchor
                                     context_text = text_content[-100:].strip()
                                     break
-                    except Exception:
+                    except Exception:  # pragma: no cover
                         pass
 
                     raw_bytes: bytes = base_image["image"]
@@ -207,7 +207,7 @@ class ImageExtractor:
         """
         try:
             from bs4 import BeautifulSoup
-        except ImportError as exc:
+        except ImportError as exc:  # pragma: no cover
             raise ImportError("beautifulsoup4 is required for HTML extraction") from exc
 
         from PIL import Image

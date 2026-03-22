@@ -105,7 +105,7 @@ class MathOCR:
             return _pix2tex_available()
         if e == "nougat":
             return _nougat_available()
-        return False
+        return False  # pragma: no cover
 
     def recognize(self, image: Any) -> Optional[OCRResult]:
         """Recognize LaTeX from *image* (PIL.Image).

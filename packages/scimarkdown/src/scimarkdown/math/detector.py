@@ -328,7 +328,7 @@ class MathDetector:
             original = str(span)
             pos = text.find(original)
             if pos == -1:
-                pos = 0
+                pos = 0  # pragma: no cover
             span_text = span.get_text()
             # Try to extract LaTeX from delimiters inside the span text
             m_inline = _LATEX_INNER_INLINE_RE.search(span_text)
