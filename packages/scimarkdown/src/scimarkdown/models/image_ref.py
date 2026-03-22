@@ -12,3 +12,4 @@ class ImageRef:
     caption: Optional[str] = None
     reference_label: Optional[str] = None
     ordinal: Optional[int] = None
+    context_text: Optional[str] = None  # Text immediately above/before the image in source

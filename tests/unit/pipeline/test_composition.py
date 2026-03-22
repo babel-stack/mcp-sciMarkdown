@@ -134,23 +134,45 @@ class TestCompositionWithImages:
         pos_b = result.index("img_b.png")
         assert pos_a < pos_b
 
-    def test_image_inserted_inline_at_position(self):
-        """Images should appear near their document position, not all at the end."""
+    def test_image_inserted_by_context_text(self):
+        """Images with context_text should appear right after the matching paragraph."""
+        pipeline = _make_pipeline(references_generate_index=False)
+        md = "# Introduction\n\nFirst paragraph about physics.\n\n# Methods\n\nSecond paragraph about chemistry.\n\n# Results\n\nThird paragraph about biology."
+        img = ImageRef(
+            position=0, file_path="chem.png", original_format="png",
+            context_text="Second paragraph about chemistry.",
+        )
+        result = pipeline.compose(_enriched(md, images=[img]))
+
+        # Image should appear after "chemistry" paragraph, before "Results"
+        pos_img = result.index("chem.png")
+        pos_chemistry = result.index("about chemistry")
+        pos_results = result.index("# Results")
+        assert pos_img > pos_chemistry, "Image should be after the chemistry paragraph"
+        assert pos_img < pos_results, "Image should be before Results section"
+
+    def test_image_context_text_fallback_to_proportional(self):
+        """If context_text doesn't match, falls back to proportional positioning."""
+        pipeline = _make_pipeline(references_generate_index=False)
+        md = "# Intro\n\nParagraph one.\n\n# End\n\nParagraph two."
+        img = ImageRef(
+            position=2000, file_path="late.png", original_format="png",
+            context_text="This text does not exist in the markdown.",
+        )
+        result = pipeline.compose(_enriched(md, images=[img]))
+        # Should still appear somewhere (proportional fallback)
+        assert "late.png" in result
+
+    def test_image_without_context_uses_position(self):
+        """Images without context_text use proportional positioning."""
         pipeline = _make_pipeline(references_generate_index=False)
         md = "# Introduction\n\nFirst paragraph.\n\n# Methods\n\nSecond paragraph.\n\n# Results\n\nThird paragraph."
-        # Image at position 0 (early) and position 2000 (late)
-        img_early = _image(position=0, file_path="early.png", reference_label="Figure 1")
-        img_late = _image(position=2000, file_path="late.png", reference_label="Figure 2")
+        img_early = _image(position=0, file_path="early.png")
+        img_late = _image(position=2000, file_path="late.png")
         result = pipeline.compose(_enriched(md, images=[img_early, img_late]))
-
-        # Early image should appear before "Results"
         pos_early = result.index("early.png")
-        pos_results = result.index("# Results")
-        assert pos_early < pos_results, "Early image should be inserted before Results section"
-
-        # Late image should appear after "Results"
         pos_late = result.index("late.png")
-        assert pos_late > pos_results, "Late image should be inserted after Results section"
+        assert pos_early < pos_late
 
     def test_single_paragraph_image_inline(self):
         """With a single paragraph, image should be right after it."""

@@ -40,4 +40,5 @@ def image_ref_to_dict(image_ref: ImageRef) -> dict:
         "caption": image_ref.caption,
         "reference_label": image_ref.reference_label,
         "ordinal": image_ref.ordinal,
+        "context_text": image_ref.context_text,
     }

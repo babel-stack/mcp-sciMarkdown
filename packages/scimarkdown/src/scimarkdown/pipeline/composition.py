@@ -68,23 +68,23 @@ class CompositionPipeline:
 
         # ---------------------------------------------------------------
         # Step 2: Image injection
-        # Insert images inline at their approximate document position.
+        # Insert images inline at their document position.
         #
-        # Strategy: split markdown into paragraphs (by blank lines),
-        # distribute images proportionally across paragraphs based on
-        # their position ratio within the total position range, and
-        # insert each image after its corresponding paragraph.
+        # Strategy:
+        # 1. If image has context_text (text from above it in the source),
+        #    find that text in the markdown and insert the image right after
+        #    the paragraph containing it.
+        # 2. Fallback: distribute proportionally by position ratio.
         # ---------------------------------------------------------------
         if enriched.images:
             sorted_images = sorted(enriched.images, key=lambda img: img.position)
-
-            # Build image markdown lines
-            image_map: dict[int, list[str]] = {}  # paragraph_index → image lines
             paragraphs = markdown.split("\n\n")
             num_paragraphs = len(paragraphs)
 
             if num_paragraphs > 0 and sorted_images:
-                # Determine position range from images
+                image_map: dict[int, list[str]] = {}  # paragraph_index → image lines
+
+                # Position range for proportional fallback
                 min_pos = sorted_images[0].position
                 max_pos = sorted_images[-1].position
                 pos_range = max(max_pos - min_pos, 1)
@@ -102,9 +102,30 @@ class CompositionPipeline:
                         alt_text = ""
                     img_line = f"![{alt_text}]({img.file_path})"
 
-                    # Map image position to paragraph index proportionally
-                    ratio = (img.position - min_pos) / pos_range if pos_range > 0 else 0
-                    para_idx = min(int(ratio * num_paragraphs), num_paragraphs - 1)
+                    para_idx = None
+
+                    # Strategy 1: Match by context_text (text above image in source)
+                    if img.context_text:
+                        # Search for the context text in each paragraph
+                        # Use last 60 chars for more precise matching
+                        search_text = img.context_text[-60:].strip()
+                        if search_text:
+                            for idx, para in enumerate(paragraphs):
+                                if search_text in para:
+                                    para_idx = idx
+                                    break
+                            # If exact match fails, try shorter fragment
+                            if para_idx is None and len(search_text) > 20:
+                                short = search_text[-20:].strip()
+                                for idx, para in enumerate(paragraphs):
+                                    if short in para:
+                                        para_idx = idx
+                                        break
+
+                    # Strategy 2: Proportional fallback
+                    if para_idx is None:
+                        ratio = (img.position - min_pos) / pos_range if pos_range > 0 else 0
+                        para_idx = min(int(ratio * num_paragraphs), num_paragraphs - 1)
 
                     image_map.setdefault(para_idx, []).append(img_line)
 

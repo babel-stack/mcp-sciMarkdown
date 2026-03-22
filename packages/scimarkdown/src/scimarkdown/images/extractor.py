@@ -124,6 +124,14 @@ class ImageExtractor:
 
         try:
             for page_num, page in enumerate(doc):
+                # Get text blocks with positions for context matching
+                text_blocks = page.get_text("blocks")  # (x0, y0, x1, y1, text, block_no, block_type)
+                # Sort by y position (top to bottom)
+                text_only = sorted(
+                    [(b[1], b[4].strip()) for b in text_blocks if b[6] == 0 and b[4].strip()],
+                    key=lambda t: t[0],
+                )
+
                 for img_index, img_info in enumerate(page.get_images(full=True)):
                     xref = img_info[0]
                     position = page_num * 1000 + img_index
@@ -132,6 +140,21 @@ class ImageExtractor:
                         base_image = doc.extract_image(xref)
                     except Exception:
                         continue
+
+                    # Find image bounding box on page for context matching
+                    context_text = None
+                    try:
+                        img_rects = page.get_image_rects(xref)
+                        if img_rects:
+                            img_y = img_rects[0].y0  # Top edge of image
+                            # Find the text block closest above the image
+                            for text_y, text_content in reversed(text_only):
+                                if text_y < img_y and text_content:
+                                    # Take last 100 chars to use as anchor
+                                    context_text = text_content[-100:].strip()
+                                    break
+                    except Exception:
+                        pass
 
                     raw_bytes: bytes = base_image["image"]
                     ext: str = base_image.get("ext", "png").lower()
@@ -157,6 +180,7 @@ class ImageExtractor:
                             original_format=ext,
                             width=pil_img.width,
                             height=pil_img.height,
+                            context_text=context_text,
                         )
                     )
         finally:
@@ -194,6 +218,14 @@ class ImageExtractor:
             if not src.startswith("data:image/"):
                 continue
 
+            # Capture text context: find preceding text in the DOM
+            context_text = None
+            prev = img_tag.find_previous(string=True)
+            while prev and not prev.strip():
+                prev = prev.find_previous(string=True)
+            if prev and prev.strip():
+                context_text = prev.strip()[-100:]
+
             try:
                 # data:image/png;base64,<data>
                 header, b64data = src.split(",", 1)
@@ -222,6 +254,7 @@ class ImageExtractor:
                     original_format=ext,
                     width=pil_img.width,
                     height=pil_img.height,
+                    context_text=context_text,
                 )
             )
 
