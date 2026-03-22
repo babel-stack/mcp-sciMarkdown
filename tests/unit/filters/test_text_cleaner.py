@@ -135,10 +135,15 @@ class TestCleanIntraParagraphBreaks:
         result = self.cleaner.clean_intra_paragraph_breaks(text)
         assert result == "Para one line a line b\n\nPara two line c line d"
 
-    def test_preserves_headings(self):
-        text = "# Heading\nstuff"
+    def test_preserves_heading_line_but_merges_body(self):
+        text = "# Heading\nline one\nline two"
         result = self.cleaner.clean_intra_paragraph_breaks(text)
-        assert result == "# Heading\nstuff"
+        assert result == "# Heading\nline one line two"
+
+    def test_heading_alone_unchanged(self):
+        text = "# Just a Heading"
+        result = self.cleaner.clean_intra_paragraph_breaks(text)
+        assert result == "# Just a Heading"
 
     def test_preserves_list_items(self):
         text = "- item one\n- item two\n- item three"

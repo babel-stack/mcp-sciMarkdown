@@ -67,10 +67,22 @@ class TextCleaner:
                 continue
 
             stripped = para.strip()
+
+            # If paragraph starts with heading, split heading from body
+            if stripped.startswith('#'):
+                lines = para.split('\n')
+                heading = lines[0]
+                body_lines = lines[1:]
+                if body_lines:
+                    body = ' '.join(l for l in body_lines)
+                    cleaned.append(heading + '\n' + body)
+                else:
+                    cleaned.append(para)
+                continue
+
             # Check if this paragraph is structural markdown
             if (
-                stripped.startswith('#')
-                or stripped.startswith('![')
+                stripped.startswith('![')
                 or stripped.startswith('|')
                 or stripped.startswith('- ')
                 or stripped.startswith('* ')
