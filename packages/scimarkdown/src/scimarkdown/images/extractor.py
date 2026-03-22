@@ -108,7 +108,7 @@ class ImageExtractor:
         dest.write_bytes(buf.read())
 
         self._total_bytes += size_bytes
-        return str(dest)
+        return filename  # Return filename only, not absolute path
 
     # ------------------------------------------------------------------
     # Extractors

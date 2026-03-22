@@ -53,7 +53,7 @@ class TestExtractImages:
         assert ref["original_format"] == "png"
         assert ref["width"] == 2
         assert ref["height"] == 2
-        assert Path(ref["file_path"]).exists()
+        assert (Path(output_dir) / ref["file_path"]).exists()
 
     def test_extract_returns_json_array(self, tmp_path):
         fn = _get_tool_fn("extract_images")

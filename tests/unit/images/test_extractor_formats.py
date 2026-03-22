@@ -48,7 +48,7 @@ def test_extract_from_html_base64(tmp_path: Path) -> None:
     html = f'<html><body><img src="data:image/png;base64,{png_b64}"></body></html>'
     refs = extractor.extract_from_html(io.BytesIO(html.encode()))
     assert len(refs) == 1
-    saved = Path(refs[0].file_path)
+    saved = tmp_path / refs[0].file_path
     assert saved.exists()
     assert saved.suffix == ".png"
 
@@ -108,7 +108,7 @@ def test_extract_from_epub_single_image(tmp_path: Path) -> None:
     epub_bytes = _make_epub_bytes({"OEBPS/images/cover.png": png_bytes})
     refs = extractor.extract_from_epub(io.BytesIO(epub_bytes))
     assert len(refs) == 1
-    assert Path(refs[0].file_path).exists()
+    assert (tmp_path / refs[0].file_path).exists()
 
 
 def test_extract_from_epub_skips_meta_inf(tmp_path: Path) -> None:
@@ -180,7 +180,7 @@ def test_extract_from_jupyter(tmp_path: Path) -> None:
     )
     refs = extractor.extract_from_jupyter(io.BytesIO(notebook_bytes))
     assert len(refs) == 1
-    assert Path(refs[0].file_path).exists()
+    assert (tmp_path / refs[0].file_path).exists()
     assert refs[0].original_format == "png"
 
 

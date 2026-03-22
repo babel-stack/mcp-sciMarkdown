@@ -64,7 +64,7 @@ class TestExtractFromPDF:
         assert len(images) >= 1
         assert images[0].width > 0
         assert images[0].height > 0
-        assert Path(images[0].file_path).exists()
+        assert (tmp_path / images[0].file_path).exists()
 
     def test_extract_from_multi_page_pdf(self, tmp_path):
         """Multi-page PDF: images from each page are collected."""
@@ -155,7 +155,7 @@ class TestExtractFromPDF:
             images = extractor.extract_from_pdf(f)
 
         if images:
-            assert Path(images[0].file_path).parent == out_dir
+            assert (out_dir / images[0].file_path).exists()
 
 
 # -------------------------------------------------------------------------
