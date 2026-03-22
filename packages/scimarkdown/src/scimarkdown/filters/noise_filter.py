@@ -117,6 +117,57 @@ class NoiseFilter:
             cleaned.append(para)
         return '\n\n'.join(cleaned)
 
+    def clean_repeated_paragraphs(self, markdown: str, min_occurrences: int = 3) -> str:
+        """Remove short paragraphs that repeat too many times (likely headers/footers).
+
+        Works at the markdown level — no PDF coordinates needed.
+
+        Parameters
+        ----------
+        markdown:
+            The full markdown text.
+        min_occurrences:
+            Minimum number of times a paragraph must appear to be considered noise.
+
+        Rules:
+        - Only considers paragraphs shorter than 100 characters.
+        - Never removes headings (lines starting with ``#``).
+        - Never removes image references (lines starting with ``![``).
+        """
+        if not markdown:
+            return markdown
+
+        paragraphs = markdown.split('\n\n')
+
+        # Count occurrences of short paragraphs
+        from collections import Counter
+        counts: Counter[str] = Counter()
+        for para in paragraphs:
+            stripped = para.strip()
+            if len(stripped) < 100:
+                counts[stripped] += 1
+
+        # Build set of noise paragraphs
+        noise = {
+            text for text, count in counts.items()
+            if count >= min_occurrences
+            and not text.startswith('#')
+            and not text.startswith('![')
+        }
+
+        if not noise:
+            return markdown
+
+        cleaned = [p for p in paragraphs if p.strip() not in noise]
+
+        logger.info(
+            "Removed %d repeated paragraph patterns: %s",
+            len(noise),
+            [n[:50] for n in noise],
+        )
+
+        return '\n\n'.join(cleaned)
+
     def clean_text(self, markdown: str, noise_strings: set[str]) -> str:
         """Remove noise strings from markdown.
 

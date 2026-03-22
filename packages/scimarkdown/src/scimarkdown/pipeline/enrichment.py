@@ -221,6 +221,10 @@ class EnrichmentPipeline:
                     base_markdown = noise_filter.clean_standalone_numbers(base_markdown)
                     result.base_markdown = base_markdown
 
+                    # Remove repeated short paragraphs (headers/footers at markdown level)
+                    base_markdown = noise_filter.clean_repeated_paragraphs(base_markdown)
+                    result.base_markdown = base_markdown
+
                 except Exception as e:
                     logger.warning("Noise filtering failed: %s", e)
 
