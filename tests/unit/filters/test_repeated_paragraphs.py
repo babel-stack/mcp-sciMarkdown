@@ -67,3 +67,32 @@ class TestCleanRepeatedParagraphs:
 
     def test_single_paragraph(self):
         assert self.f.clean_repeated_paragraphs("Hello") == "Hello"
+
+    def test_removes_repeated_lines_within_paragraphs(self):
+        """Header/footer lines merged with content via single newlines."""
+        md = (
+            "HEADER\nContent page 1\nFOOTER\n\n"
+            "HEADER\nContent page 2\nFOOTER\n\n"
+            "HEADER\nContent page 3\nFOOTER"
+        )
+        result = self.f.clean_repeated_paragraphs(md, min_occurrences=3)
+        assert "HEADER" not in result
+        assert "FOOTER" not in result
+        assert "Content page 1" in result
+        assert "Content page 2" in result
+        assert "Content page 3" in result
+
+    def test_real_quevedo_pattern(self):
+        """Simulates the actual Quevedo PDF pattern: header\\npagenum\\nfooter."""
+        parts = []
+        for i in range(5):
+            parts.append(
+                f"INTRODUCCIÓN A L A MECÁNICA DE FLUIDOS\n{i}\nCEVALLOS, O., 2022"
+            )
+            parts.append(f"Actual content for chapter {i}.")
+        md = "\n\n".join(parts)
+        result = self.f.clean_repeated_paragraphs(md, min_occurrences=3)
+        assert "INTRODUCCIÓN A L A MECÁNICA DE FLUIDOS" not in result
+        assert "CEVALLOS, O., 2022" not in result
+        for i in range(5):
+            assert f"Actual content for chapter {i}" in result
