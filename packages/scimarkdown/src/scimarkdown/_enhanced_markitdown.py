@@ -32,6 +32,7 @@ class EnhancedMarkItDown(MarkItDown):
         super().__init__(**kwargs)
         self.sci_config = sci_config or load_config()
         self.output_dir = output_dir or Path(".")
+        self._output_dir_explicit = output_dir is not None
         self._enrichment = EnrichmentPipeline(self.sci_config)
         self._composition = CompositionPipeline(self.sci_config)
 
@@ -60,8 +61,8 @@ class EnhancedMarkItDown(MarkItDown):
         with open(path, "rb") as fh:
             data = fh.read()
 
-        # Set output_dir to the file's parent directory when "same"
-        if self.sci_config.images_output_dir == "same":
+        # Only default to file's parent when output_dir was not explicitly set
+        if self.sci_config.images_output_dir == "same" and self._output_dir_explicit is False:
             self.output_dir = Path(path).parent.resolve()
 
         return self.convert_stream(
