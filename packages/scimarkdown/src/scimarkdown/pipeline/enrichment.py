@@ -142,6 +142,18 @@ class EnrichmentPipeline:
                     logger.warning("MathClassifier failed, keeping original regions: %s", exc)
 
         # ---------------------------------------------------------------
+        # TOC processing: detect and convert to hyperlinks
+        # ---------------------------------------------------------------
+        if self.config.filters_enabled:
+            try:
+                from scimarkdown.filters.toc_processor import TocProcessor
+                toc = TocProcessor()
+                base_markdown = toc.process(base_markdown)
+                result.base_markdown = base_markdown
+            except Exception as e:
+                logger.warning("TOC processing failed: %s", e)
+
+        # ---------------------------------------------------------------
         # Image extraction
         # ---------------------------------------------------------------
         method_name = _IMAGE_FORMATS.get(file_extension.lower())
