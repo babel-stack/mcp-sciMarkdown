@@ -2,6 +2,7 @@
 
 import io
 import logging
+import re
 from typing import IO, Optional
 
 from scimarkdown.config import SciMarkdownConfig
@@ -94,6 +95,27 @@ class NoiseFilter:
         if not self.config.filters_enabled or not self.config.filters_decorative_images:
             return images
         return self.decorative_filter.filter(images)
+
+    def clean_standalone_numbers(self, markdown: str) -> str:
+        """Remove standalone numbers that are likely page numbers.
+
+        A standalone number is a paragraph containing ONLY a number (1-4 digits),
+        optionally surrounded by whitespace.  Roman numerals (i–xx) are also removed.
+
+        Does NOT remove numbers that are part of a sentence.
+        """
+        paragraphs = markdown.split('\n\n')
+        cleaned = []
+        for para in paragraphs:
+            stripped = para.strip()
+            # Standalone number (1-4 digits, possibly with whitespace)
+            if re.match(r'^\s*\d{1,4}\s*$', stripped):
+                continue
+            # Roman numerals standalone (i, ii, ..., xx)
+            if re.match(r'^\s*[ivxlc]{1,6}\s*$', stripped, re.IGNORECASE):
+                continue
+            cleaned.append(para)
+        return '\n\n'.join(cleaned)
 
     def clean_text(self, markdown: str, noise_strings: set[str]) -> str:
         """Remove noise strings from markdown.

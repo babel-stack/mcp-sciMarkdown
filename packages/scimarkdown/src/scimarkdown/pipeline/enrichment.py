@@ -217,6 +217,10 @@ class EnrichmentPipeline:
                         images = noise_filter.filter_images(images)
                         logger.info("After decorative filter: %d images", len(images))
 
+                    # Remove standalone page numbers from markdown text
+                    base_markdown = noise_filter.clean_standalone_numbers(base_markdown)
+                    result.base_markdown = base_markdown
+
                 except Exception as e:
                     logger.warning("Noise filtering failed: %s", e)
 
