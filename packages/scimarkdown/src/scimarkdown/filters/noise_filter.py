@@ -161,13 +161,40 @@ class NoiseFilter:
         if not noise_lines:
             return markdown
 
+        def _is_noise_line(line_text: str) -> bool:
+            """Check if a line is noise — exact match or pagenum + noise."""
+            stripped = line_text.strip()
+            if stripped in noise_lines:
+                return True
+            # Check if line is just a page number glued to a noise string
+            # e.g. "4 CEVALLOS, O., 2022" or "viii CEVALLOS, O., 2022"
+            for noise in noise_lines:
+                if stripped.endswith(noise):
+                    prefix = stripped[: -len(noise)].strip()
+                    if not prefix:
+                        continue
+                    # prefix is a page number (arabic or roman)
+                    if re.match(r'^\d{1,4}$', prefix):
+                        return True
+                    if re.match(r'^[ivxlc]{1,6}$', prefix, re.IGNORECASE):
+                        return True
+                if stripped.startswith(noise):
+                    suffix = stripped[len(noise):].strip()
+                    if not suffix:
+                        continue
+                    if re.match(r'^\d{1,4}$', suffix):
+                        return True
+                    if re.match(r'^[ivxlc]{1,6}$', suffix, re.IGNORECASE):
+                        return True
+            return False
+
         # Remove noise lines from each paragraph
         paragraphs = markdown.split('\n\n')
         cleaned_paragraphs: list[str] = []
 
         for para in paragraphs:
             lines = para.split('\n')
-            kept = [l for l in lines if l.strip() not in noise_lines]
+            kept = [l for l in lines if not _is_noise_line(l)]
             remaining = '\n'.join(kept).strip()
             if remaining:
                 cleaned_paragraphs.append(remaining)

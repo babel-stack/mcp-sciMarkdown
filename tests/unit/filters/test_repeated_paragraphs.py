@@ -96,3 +96,18 @@ class TestCleanRepeatedParagraphs:
         assert "CEVALLOS, O., 2022" not in result
         for i in range(5):
             assert f"Actual content for chapter {i}" in result
+
+    def test_removes_pagenum_glued_to_noise(self):
+        """Lines like '4 CEVALLOS, O., 2022' or 'viii FOOTER' should also be removed."""
+        parts = []
+        for i in range(5):
+            parts.append(f"FOOTER")
+            parts.append(f"Content {i}")
+        # Add some glued pagenum+noise lines
+        parts.append(f"4 FOOTER")
+        parts.append(f"viii FOOTER")
+        parts.append("More content")
+        md = "\n\n".join(parts)
+        result = self.f.clean_repeated_paragraphs(md, min_occurrences=3)
+        assert "FOOTER" not in result
+        assert "More content" in result
