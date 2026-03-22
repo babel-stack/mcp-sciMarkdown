@@ -153,6 +153,24 @@ class EnrichmentPipeline:
             except Exception as e:
                 logger.warning("TOC processing failed: %s", e)
 
+            # Heading detection: convert chapter/section patterns to markdown headings
+            try:
+                from scimarkdown.filters.heading_detector import HeadingDetector
+                heading_detector = HeadingDetector()
+                base_markdown = heading_detector.process(base_markdown)
+                result.base_markdown = base_markdown
+            except Exception as e:
+                logger.warning("Heading detection failed: %s", e)
+
+            # Text cleaning: CID chars, absolute paths, empty lines
+            try:
+                from scimarkdown.filters.text_cleaner import TextCleaner
+                cleaner = TextCleaner()
+                base_markdown = cleaner.process(base_markdown)
+                result.base_markdown = base_markdown
+            except Exception as e:
+                logger.warning("Text cleaning failed: %s", e)
+
         # ---------------------------------------------------------------
         # Image extraction
         # ---------------------------------------------------------------
