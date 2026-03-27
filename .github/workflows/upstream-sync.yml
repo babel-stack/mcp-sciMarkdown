@@ -85,7 +85,7 @@ jobs:
 
       - name: Create pull request
         if: steps.outcome.outputs.merged == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const branch = process.env.sync_branch;
